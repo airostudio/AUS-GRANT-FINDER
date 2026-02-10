@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "pnpm turbo build --filter=@ausgrant/web",
   "devCommand": "pnpm turbo dev --filter=@ausgrant/web",
-  "installCommand": "pnpm install --no-frozen-lockfile",
+  "installCommand": "bash scripts/vercel-install.sh",
   "framework": null,
   "outputDirectory": "apps/web/.next"
 }
