@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 
 from src.orchestrator import ScraperOrchestrator
 from src.database.service import DatabaseService
+from src.services.organization_service import OrganizationService
+from src.services.grant_writer_service import GrantWriterService
 
 # Load environment variables
 load_dotenv()
@@ -35,22 +37,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global database service
+# Global services
 db = DatabaseService(os.getenv("DATABASE_URL"))
+org_service = OrganizationService(os.getenv("DATABASE_URL"))
+writer_service = GrantWriterService()
 
 
 @app.on_event("startup")
 async def startup_event():
     """Connect to database on startup."""
     await db.connect()
-    logger.info("Application started, database connected")
+    await org_service.connect()
+    await writer_service.connect()
+    logger.info("Application started, all services connected")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Disconnect from database on shutdown."""
     await db.disconnect()
-    logger.info("Application shutdown, database disconnected")
+    await org_service.disconnect()
+    await writer_service.disconnect()
+    logger.info("Application shutdown, all services disconnected")
 
 
 @app.get("/health")
@@ -189,4 +197,175 @@ async def close_expired_grants() -> dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"Error closing expired grants: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Organization Management Endpoints
+# ============================================================================
+
+@app.post("/organizations")
+async def create_organization(org_data: dict[str, Any]) -> dict[str, Any]:
+    """Create a new organization."""
+    try:
+        org_id = await org_service.create_organization(org_data)
+
+        return {
+            "status": "success",
+            "organization_id": org_id,
+            "message": f"Organization '{org_data.get('name')}' created successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error creating organization: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/organizations")
+async def list_organizations(limit: int = 100) -> dict[str, Any]:
+    """List all organizations."""
+    try:
+        organizations = await org_service.list_organizations(limit=limit)
+
+        return {
+            "organizations": organizations,
+            "total": len(organizations),
+        }
+    except Exception as e:
+        logger.error(f"Error listing organizations: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/organizations/{org_id}")
+async def get_organization(org_id: str) -> dict[str, Any]:
+    """Get organization by ID."""
+    try:
+        organization = await org_service.get_organization(org_id)
+
+        if not organization:
+            raise HTTPException(status_code=404, detail="Organization not found")
+
+        return organization
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving organization: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/organizations/{org_id}")
+async def update_organization(
+    org_id: str,
+    updates: dict[str, Any]
+) -> dict[str, Any]:
+    """Update an organization."""
+    try:
+        success = await org_service.update_organization(org_id, updates)
+
+        if not success:
+            raise HTTPException(status_code=404, detail="Organization not found")
+
+        return {
+            "status": "success",
+            "organization_id": org_id,
+            "message": "Organization updated successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating organization: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/organizations/{org_id}")
+async def delete_organization(org_id: str) -> dict[str, Any]:
+    """Delete an organization."""
+    try:
+        success = await org_service.delete_organization(org_id)
+
+        if not success:
+            raise HTTPException(status_code=404, detail="Organization not found")
+
+        return {
+            "status": "success",
+            "message": "Organization deleted successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting organization: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Grant Writing Endpoints (The Veteran)
+# ============================================================================
+
+@app.post("/applications/generate")
+async def generate_application(
+    grant_id: str,
+    organization_id: str,
+    background_tasks: BackgroundTasks
+) -> dict[str, Any]:
+    """
+    Generate a complete grant application using AI.
+
+    The Veteran will analyze the grant criteria and organization data,
+    then generate compelling, evidence-based responses.
+    """
+    try:
+        logger.info(f"Generating application for grant {grant_id}, org {organization_id}")
+
+        application = await writer_service.generate_application(
+            grant_id=grant_id,
+            organization_id=organization_id
+        )
+
+        return {
+            "status": "success",
+            "message": "Grant application generated successfully",
+            **application
+        }
+    except ValueError as e:
+        logger.error(f"Validation error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error generating application: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/applications/{application_id}")
+async def get_application(application_id: str) -> dict[str, Any]:
+    """Get application details including all responses."""
+    try:
+        # TODO: Implement application retrieval
+        return {
+            "application_id": application_id,
+            "status": "draft",
+            "message": "Application retrieval - implementation pending"
+        }
+    except Exception as e:
+        logger.error(f"Error retrieving application: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/applications")
+async def list_applications(
+    organization_id: str | None = None,
+    status: str | None = None,
+    limit: int = 100
+) -> dict[str, Any]:
+    """List applications with optional filtering."""
+    try:
+        # TODO: Implement application listing
+        return {
+            "applications": [],
+            "total": 0,
+            "filters": {
+                "organization_id": organization_id,
+                "status": status,
+                "limit": limit
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error listing applications: {e}")
         raise HTTPException(status_code=500, detail=str(e))
