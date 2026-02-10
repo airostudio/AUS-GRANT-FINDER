@@ -25,9 +25,12 @@ When setting up your Vercel project, use these settings:
 
 ### Step 2: Environment Variables
 
-Add these environment variables in Vercel Dashboard:
+Add these environment variables in Vercel Dashboard (Project Settings → Environment Variables):
 
 ```bash
+# CRITICAL: Enable Corepack for pnpm@8.x support
+ENABLE_EXPERIMENTAL_COREPACK=1
+
 # Database (Required for web app)
 DATABASE_URL="postgresql://user:password@host:5432/database?pgbouncer=true"
 DIRECT_URL="postgresql://user:password@host:5432/database"
@@ -41,6 +44,8 @@ NEXT_PUBLIC_API_URL="https://your-api-domain.com"
 # Optional: For production
 NODE_ENV="production"
 ```
+
+**⚠️ IMPORTANT:** The `ENABLE_EXPERIMENTAL_COREPACK=1` variable is REQUIRED. Without it, Vercel will use pnpm 6.x which is incompatible with this project (requires pnpm >=8.0.0).
 
 ### Step 3: Deploy
 
@@ -88,13 +93,25 @@ The Python FastAPI backend needs to be deployed separately. Recommended options:
 
 ## Common Issues
 
+### Issue: "ERR_PNPM_UNSUPPORTED_ENGINE - Expected version: >=8.0.0, Got: 6.35.1"
+
+**Solution:** Vercel is using an old pnpm version. You MUST set this environment variable:
+
+1. Go to Vercel Dashboard → Project Settings → Environment Variables
+2. Add: `ENABLE_EXPERIMENTAL_COREPACK` = `1`
+3. Apply to: Production, Preview, and Development
+4. Redeploy the project
+
+This enables Corepack which respects the `packageManager` field in package.json and uses pnpm@8.15.0.
+
 ### Issue: "node_modules missing"
 
 **Solution:** The `vercel.json` and `.npmrc` files have been configured to handle this. If you still see this error:
 
 1. Check that `vercel.json` exists in the root
 2. Verify pnpm version in `package.json` (`"packageManager": "pnpm@8.15.0"`)
-3. Clear Vercel cache and redeploy
+3. Ensure `ENABLE_EXPERIMENTAL_COREPACK=1` is set in Vercel environment variables
+4. Clear Vercel cache and redeploy
 
 ### Issue: "Cannot find module '@ausgrant/ai-engine'"
 
