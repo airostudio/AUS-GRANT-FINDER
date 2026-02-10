@@ -1,0 +1,56 @@
+{
+  "portalId": "grants.gov.au",
+  "name": "GrantConnect",
+  "baseUrl": "https://www.grants.gov.au",
+  "loginUrl": "https://www.grants.gov.au/login",
+  "applicationUrl": "https://www.grants.gov.au/apply",
+  "fields": [
+    {
+      "criteriaId": "organization-name",
+      "selector": "#organization_name",
+      "type": "text",
+      "required": true
+    },
+    {
+      "criteriaId": "abn",
+      "selector": "#abn",
+      "type": "text",
+      "maxLength": 11,
+      "required": true
+    },
+    {
+      "criteriaId": "project-title",
+      "selector": "#project_title",
+      "type": "text",
+      "maxLength": 100,
+      "required": true
+    },
+    {
+      "criteriaId": "project-description",
+      "selector": "#project_description",
+      "type": "textarea",
+      "maxLength": 500,
+      "required": true
+    }
+  ],
+  "navigation": [
+    {
+      "step": 1,
+      "description": "Navigate to application page",
+      "action": "navigate",
+      "url": "https://www.grants.gov.au/apply"
+    },
+    {
+      "step": 2,
+      "description": "Click 'Start Application' button",
+      "action": "click",
+      "selector": "#start-application-btn"
+    },
+    {
+      "step": 3,
+      "description": "Wait for form to load",
+      "action": "wait",
+      "verificationSelector": "#application-form"
+    }
+  ]
+}

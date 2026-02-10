@@ -1,0 +1,161 @@
+// Prisma Schema for AusGrant-Automate
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+// Government Grants and Tenders
+model Grant {
+  id              String   @id @default(cuid())
+  externalId      String?  @unique
+  title           String
+  description     String   @db.Text
+  portal          String   // grants.gov.au, tenders.gov.au, etc.
+  level           String   // Federal, State, Local
+  state           String?  // NSW, VIC, QLD, etc.
+  department      String
+  category        String
+  fundingMin      Int?
+  fundingMax      Int?
+  openingDate     DateTime
+  closingDate     DateTime
+  guidelines      String?  @db.Text
+  eligibility     String?  @db.Text
+  criteria        Json     // Array of selection criteria
+  url             String
+  status          String   @default("open") // open, closed, draft
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  applications    Application[]
+  embeddings      Embedding[]
+
+  @@index([portal])
+  @@index([level])
+  @@index([closingDate])
+  @@index([status])
+}
+
+// User Organizations
+model Organization {
+  id              String   @id @default(cuid())
+  name            String
+  abn             String   @unique
+  industry        String
+  yearsInOperation Int
+  employees       Int?
+  revenue         Int?
+  location        String
+  description     String?  @db.Text
+  achievements    Json     // Array of achievements
+  capabilities    Json     // Array of capabilities
+  previousGrants  Json?    // Array of previous grant success
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  applications    Application[]
+  documents       Document[]
+  embeddings      Embedding[]
+
+  @@index([abn])
+}
+
+// Grant Applications
+model Application {
+  id              String   @id @default(cuid())
+  grantId         String
+  organizationId  String
+  status          String   @default("draft") // draft, in_progress, submitted, successful, unsuccessful
+  referenceNumber String?
+  submittedAt     DateTime?
+  resultAt        DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  grant           Grant    @relation(fields: [grantId], references: [id])
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  responses       Response[]
+  documents       Document[]
+
+  @@index([grantId])
+  @@index([organizationId])
+  @@index([status])
+}
+
+// AI-Generated Responses
+model Response {
+  id              String   @id @default(cuid())
+  applicationId   String
+  criteriaId      String
+  criteriaTitle   String
+  response        String   @db.Text
+  wordCount       Int
+  confidence      Float
+  version         Int      @default(1)
+  approved        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  application     Application @relation(fields: [applicationId], references: [id])
+
+  @@index([applicationId])
+  @@index([approved])
+}
+
+// Supporting Documents
+model Document {
+  id              String   @id @default(cuid())
+  organizationId  String
+  applicationId   String?
+  name            String
+  type            String   // pdf, docx, xlsx, etc.
+  size            Int
+  path            String
+  description     String?
+  createdAt       DateTime @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  application     Application? @relation(fields: [applicationId], references: [id])
+
+  @@index([organizationId])
+  @@index([applicationId])
+}
+
+// Vector Embeddings for RAG
+model Embedding {
+  id              String   @id @default(cuid())
+  sourceType      String   // grant, organization, response, guideline
+  sourceId        String
+  content         String   @db.Text
+  embedding       Unsupported("vector(1536)")
+  metadata        Json?
+  createdAt       DateTime @default(now())
+
+  grant           Grant?   @relation(fields: [sourceId], references: [id])
+  organization    Organization? @relation(fields: [sourceId], references: [id])
+
+  @@index([sourceType])
+  @@index([sourceId])
+}
+
+// Australian LGAs and Departments (Seed Data)
+model Department {
+  id              String   @id @default(cuid())
+  name            String
+  level           String   // Federal, State, Local
+  state           String?
+  website         String?
+  contactEmail    String?
+  grantPortal     String?
+  createdAt       DateTime @default(now())
+
+  @@index([level])
+  @@index([state])
+}

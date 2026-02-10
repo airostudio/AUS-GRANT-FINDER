@@ -1,0 +1,45 @@
+name: Scheduled Grant Scraping
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  scrape-grants:
+    name: Scrape Government Portals
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+      - name: Install dependencies
+        working-directory: apps/scraper
+        run: poetry install
+      - name: Install Playwright
+        working-directory: apps/scraper
+        run: poetry run playwright install --with-deps chromium
+      - name: Run Federal scraper
+        working-directory: apps/scraper
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          echo "Running grant scrapers..."
+          # poetry run python -m src.scrapers.federal
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'Scheduled Scrape Failed',
+              body: 'The scheduled grant scraping job has failed. Please check the logs.',
+              labels: ['bug', 'automation']
+            })
