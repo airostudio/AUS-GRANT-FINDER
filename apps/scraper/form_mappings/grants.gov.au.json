@@ -1,0 +1,113 @@
+{
+  "portalId": "grants.gov.au",
+  "name": "GrantConnect",
+  "baseUrl": "https://www.grants.gov.au",
+  "loginUrl": "https://www.grants.gov.au/login",
+  "applicationUrl": "https://www.grants.gov.au/apply",
+  "submit_button": "#submit-application",
+  "reference_number_selector": ".confirmation-number",
+  "fields": [
+    {
+      "criteriaId": "organization-name",
+      "selector": "#organization_name",
+      "type": "text",
+      "required": true,
+      "label": "Organization Name"
+    },
+    {
+      "criteriaId": "abn",
+      "selector": "#abn",
+      "type": "text",
+      "maxLength": 11,
+      "required": true,
+      "label": "ABN"
+    },
+    {
+      "criteriaId": "contact-person",
+      "selector": "#contact_person",
+      "type": "text",
+      "required": true,
+      "label": "Contact Person"
+    },
+    {
+      "criteriaId": "contact-email",
+      "selector": "#contact_email",
+      "type": "email",
+      "required": true,
+      "label": "Contact Email"
+    },
+    {
+      "criteriaId": "project-title",
+      "selector": "#project_title",
+      "type": "text",
+      "maxLength": 100,
+      "required": true,
+      "label": "Project Title"
+    },
+    {
+      "criteriaId": "project-summary",
+      "selector": "#project_summary",
+      "type": "textarea",
+      "maxLength": 500,
+      "required": true,
+      "label": "Project Summary"
+    },
+    {
+      "criteriaId": "criterion-1",
+      "selector": "#criteria_1_response",
+      "type": "textarea",
+      "maxLength": 500,
+      "required": true,
+      "label": "Selection Criterion 1"
+    },
+    {
+      "criteriaId": "criterion-2",
+      "selector": "#criteria_2_response",
+      "type": "textarea",
+      "maxLength": 500,
+      "required": true,
+      "label": "Selection Criterion 2"
+    },
+    {
+      "criteriaId": "criterion-3",
+      "selector": "#criteria_3_response",
+      "type": "textarea",
+      "maxLength": 500,
+      "required": false,
+      "label": "Selection Criterion 3"
+    },
+    {
+      "criteriaId": "funding-requested",
+      "selector": "#funding_amount",
+      "type": "text",
+      "required": true,
+      "label": "Funding Requested"
+    }
+  ],
+  "navigation": [
+    {
+      "step": 1,
+      "description": "Load application form",
+      "action": "navigate",
+      "url": "https://www.grants.gov.au/apply"
+    },
+    {
+      "step": 2,
+      "description": "Accept terms and conditions",
+      "action": "click",
+      "selector": "#accept_terms"
+    },
+    {
+      "step": 3,
+      "description": "Click Start Application",
+      "action": "click",
+      "selector": "#start-application-btn"
+    },
+    {
+      "step": 4,
+      "description": "Wait for form to load",
+      "action": "wait",
+      "verificationSelector": "#application-form"
+    }
+  ]
+}

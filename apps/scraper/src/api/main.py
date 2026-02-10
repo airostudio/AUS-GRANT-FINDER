@@ -11,6 +11,7 @@ from src.orchestrator import ScraperOrchestrator
 from src.database.service import DatabaseService
 from src.services.organization_service import OrganizationService
 from src.services.grant_writer_service import GrantWriterService
+from src.services.submission_orchestrator import SubmissionOrchestrator
 
 # Load environment variables
 load_dotenv()
@@ -23,9 +24,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="AusGrant Scraper API",
-    description="API for scraping Australian government grants and tenders",
-    version="0.2.0",
+    title="AusGrant-Automate API",
+    description="Complete AI-powered grant application system",
+    version="1.0.0",
 )
 
 # CORS middleware for Next.js frontend
@@ -41,6 +42,7 @@ app.add_middleware(
 db = DatabaseService(os.getenv("DATABASE_URL"))
 org_service = OrganizationService(os.getenv("DATABASE_URL"))
 writer_service = GrantWriterService()
+submission_orchestrator = SubmissionOrchestrator()
 
 
 @app.on_event("startup")
@@ -49,6 +51,7 @@ async def startup_event():
     await db.connect()
     await org_service.connect()
     await writer_service.connect()
+    await submission_orchestrator.connect()
     logger.info("Application started, all services connected")
 
 
@@ -58,6 +61,7 @@ async def shutdown_event():
     await db.disconnect()
     await org_service.disconnect()
     await writer_service.disconnect()
+    await submission_orchestrator.disconnect()
     logger.info("Application shutdown, all services disconnected")
 
 
@@ -369,3 +373,147 @@ async def list_applications(
     except Exception as e:
         logger.error(f"Error listing applications: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Complete Submission Endpoints (The Closer)
+# ============================================================================
+
+@app.post("/submissions/complete")
+async def submit_complete_application(
+    grant_id: str,
+    organization_id: str,
+    mode: str = "semi-automatic",
+    auto_fill: bool = True,
+) -> dict[str, Any]:
+    """
+    Complete end-to-end application: Generate → Fill → Submit
+
+    This is the main endpoint that orchestrates the entire process:
+    1. Generate AI responses using The Veteran
+    2. Fill the government form automatically
+    3. Submit the application (with human verification if mode=semi-automatic)
+
+    Args:
+        grant_id: ID of grant to apply for
+        organization_id: ID of applying organization
+        mode: "automatic", "semi-automatic" (default), or "manual"
+        auto_fill: Whether to automatically fill forms (default: True)
+
+    Returns:
+        Complete submission result with application ID and reference number
+    """
+    try:
+        logger.info(
+            f"Complete submission requested: grant={grant_id}, "
+            f"org={organization_id}, mode={mode}"
+        )
+
+        result = await submission_orchestrator.submit_application(
+            grant_id=grant_id,
+            organization_id=organization_id,
+            mode=mode,
+            auto_fill=auto_fill,
+        )
+
+        return {
+            "status": "success",
+            "message": f"Application {result['step']}",
+            **result
+        }
+
+    except ValueError as e:
+        logger.error(f"Validation error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error in complete submission: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/submissions/{application_id}/status")
+async def get_submission_status(application_id: str) -> dict[str, Any]:
+    """Get current status of an application submission."""
+    try:
+        status = await submission_orchestrator.get_submission_status(application_id)
+
+        if not status:
+            raise HTTPException(status_code=404, detail="Application not found")
+
+        return {
+            "application_id": application_id,
+            "status": status.get("status"),
+            "reference_number": status.get("referenceNumber"),
+            "submitted_at": status.get("submittedAt"),
+            "created_at": status.get("createdAt"),
+            "updated_at": status.get("updatedAt"),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving submission status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/submissions/{application_id}/retry")
+async def retry_submission(
+    application_id: str,
+    mode: str = "semi-automatic"
+) -> dict[str, Any]:
+    """Retry a failed or incomplete submission."""
+    try:
+        result = await submission_orchestrator.retry_submission(
+            application_id=application_id,
+            mode=mode
+        )
+
+        return {
+            "status": "success",
+            "message": "Submission retried",
+            **result
+        }
+
+    except ValueError as e:
+        logger.error(f"Validation error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error retrying submission: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/info")
+async def get_system_info() -> dict[str, Any]:
+    """Get complete system information and capabilities."""
+    return {
+        "name": "AusGrant-Automate",
+        "version": "1.0.0",
+        "description": "Complete AI-powered grant application system",
+        "phases": {
+            "phase_1": "Project Setup - Complete",
+            "phase_2": "The Scout (Grant Aggregation) - Complete",
+            "phase_3": "The Veteran (AI Grant Writer) - Complete",
+            "phase_4": "The Closer (Form Automation) - Complete"
+        },
+        "capabilities": [
+            "Scrape grants from 5 government portals",
+            "AI-powered criteria parsing",
+            "Organization data management",
+            "Generate evidence-based grant applications",
+            "Automated form filling with Playwright",
+            "Human-in-the-loop verification",
+            "Complete submission tracking"
+        ],
+        "portals": [
+            "grants.gov.au",
+            "tenders.gov.au",
+            "tenders.vic.gov.au",
+            "nswbuy.com.au",
+            "business.qld.gov.au"
+        ],
+        "endpoints": {
+            "scraping": ["/scrape/federal", "/scrape/all", "/grants"],
+            "organizations": ["/organizations"],
+            "writing": ["/applications/generate"],
+            "submissions": ["/submissions/complete", "/submissions/{id}/status"]
+        }
+    }
