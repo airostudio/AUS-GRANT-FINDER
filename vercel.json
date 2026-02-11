@@ -1,8 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "rm -rf .turbo node_modules/.cache && npx turbo build --filter=@ausgrant/web --force",
-  "devCommand": "npx turbo dev --filter=@ausgrant/web",
-  "installCommand": "npm install",
-  "framework": "nextjs",
-  "rootDirectory": "apps/web"
+  "buildCommand": "npx turbo build --filter=@ausgrant/web",
+  "installCommand": "npm install"
 }
