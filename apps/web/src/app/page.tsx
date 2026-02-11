@@ -1,36 +1,34 @@
+import { GrantWizard } from '@/components/grant-wizard';
+
 export default function HomePage() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-24">
-      <div className="max-w-5xl w-full">
-        <h1 className="text-5xl font-bold text-center mb-6">
+    <main className="flex min-h-screen flex-col p-8 md:p-16">
+      {/* Header */}
+      <div className="max-w-6xl w-full mx-auto mb-12">
+        <h1 className="text-4xl md:text-5xl font-bold text-center mb-4">
           AusGrant-Automate
         </h1>
-        <p className="text-xl text-center text-muted-foreground mb-12">
+        <p className="text-lg md:text-xl text-center text-muted-foreground mb-8">
           AI-Powered Tender & Grant Engine for Australian Government Opportunities
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="p-6 border rounded-lg">
-            <h2 className="text-2xl font-semibold mb-3">🔍 The Scout</h2>
-            <p className="text-muted-foreground">
-              Aggregates tenders and grants from Federal, State, and Local government portals.
-            </p>
+        {/* Feature Pills */}
+        <div className="flex flex-wrap justify-center gap-3 mb-8">
+          <div className="px-4 py-2 bg-accent rounded-full text-sm font-medium">
+            🔍 The Scout - Aggregates Opportunities
           </div>
-
-          <div className="p-6 border rounded-lg">
-            <h2 className="text-2xl font-semibold mb-3">✍️ The Veteran</h2>
-            <p className="text-muted-foreground">
-              AI writer with 30+ years of experience crafting compelling grant applications.
-            </p>
+          <div className="px-4 py-2 bg-accent rounded-full text-sm font-medium">
+            ✍️ The Veteran - AI Grant Writer
           </div>
-
-          <div className="p-6 border rounded-lg">
-            <h2 className="text-2xl font-semibold mb-3">🚀 The Closer</h2>
-            <p className="text-muted-foreground">
-              Automated form filling and submission with human-in-the-loop verification.
-            </p>
+          <div className="px-4 py-2 bg-accent rounded-full text-sm font-medium">
+            🚀 The Closer - Automated Submission
           </div>
         </div>
+      </div>
+
+      {/* Wizard */}
+      <div className="flex-1">
+        <GrantWizard />
       </div>
     </main>
   );
