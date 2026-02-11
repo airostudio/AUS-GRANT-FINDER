@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm turbo build --filter=@ausgrant/web",
+  "buildCommand": "rm -rf .turbo node_modules/.cache && pnpm turbo build --filter=@ausgrant/web --force",
   "devCommand": "pnpm turbo dev --filter=@ausgrant/web",
   "installCommand": "pnpm install",
   "framework": null,
