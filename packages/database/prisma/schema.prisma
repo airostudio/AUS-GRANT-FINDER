@@ -138,8 +138,8 @@ model Embedding {
   metadata        Json?
   createdAt       DateTime @default(now())
 
-  grant           Grant?   @relation(fields: [sourceId], references: [id])
-  organization    Organization? @relation(fields: [sourceId], references: [id])
+  grant           Grant?   @relation(fields: [sourceId], references: [id], map: "Embedding_grant_fkey")
+  organization    Organization? @relation(fields: [sourceId], references: [id], map: "Embedding_organization_fkey")
 
   @@index([sourceType])
   @@index([sourceId])
