@@ -8,8 +8,19 @@ import {
   TENDER_TYPES,
   type State,
   type Council,
+  type Opportunity,
 } from '@/lib/data';
-import { ChevronRight, MapPin, Building2, FileText, Search } from 'lucide-react';
+import {
+  ChevronRight,
+  MapPin,
+  Building2,
+  FileText,
+  Search,
+  DollarSign,
+  Calendar,
+  Filter,
+} from 'lucide-react';
+import { SearchResults } from './search-results';
 
 type GeographicScope = 'australia' | 'state' | 'council';
 type OpportunityType = 'grants' | 'tenders' | 'both';
@@ -20,6 +31,9 @@ interface WizardState {
   selectedState: State | null;
   selectedCouncil: Council | null;
   selectedCategories: string[];
+  minAmount: string;
+  maxAmount: string;
+  showAdvancedFilters: boolean;
 }
 
 export function GrantWizard() {
@@ -29,11 +43,17 @@ export function GrantWizard() {
     selectedState: null,
     selectedCouncil: null,
     selectedCategories: [],
+    minAmount: '',
+    maxAmount: '',
+    showAdvancedFilters: false,
   });
 
   const [currentStep, setCurrentStep] = useState<
     'scope' | 'state' | 'council' | 'type' | 'category' | 'results'
   >('scope');
+
+  const [searchResults, setSearchResults] = useState<Opportunity[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const resetWizard = () => {
     setWizardState({
@@ -42,8 +62,12 @@ export function GrantWizard() {
       selectedState: null,
       selectedCouncil: null,
       selectedCategories: [],
+      minAmount: '',
+      maxAmount: '',
+      showAdvancedFilters: false,
     });
     setCurrentStep('scope');
+    setSearchResults([]);
   };
 
   const handleScopeSelect = (scope: GeographicScope) => {
@@ -81,8 +105,46 @@ export function GrantWizard() {
     setWizardState({ ...wizardState, selectedCategories: categories });
   };
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
+    setIsLoading(true);
     setCurrentStep('results');
+
+    try {
+      // Build query parameters
+      const params = new URLSearchParams();
+
+      if (wizardState.scope) params.append('scope', wizardState.scope);
+      if (wizardState.selectedState)
+        params.append('state', wizardState.selectedState.id);
+      if (wizardState.selectedCouncil)
+        params.append('council', wizardState.selectedCouncil.id);
+      if (wizardState.opportunityType)
+        params.append('opportunityType', wizardState.opportunityType);
+      if (wizardState.selectedCategories.length > 0)
+        params.append('categories', wizardState.selectedCategories.join(','));
+      if (wizardState.minAmount)
+        params.append('minAmount', wizardState.minAmount);
+      if (wizardState.maxAmount)
+        params.append('maxAmount', wizardState.maxAmount);
+
+      params.append('status', 'all'); // Show all opportunities including closed ones
+
+      // Call API
+      const response = await fetch(`/api/opportunities?${params.toString()}`);
+      const data = await response.json();
+
+      if (data.success) {
+        setSearchResults(data.opportunities);
+      } else {
+        console.error('Search failed:', data);
+        setSearchResults([]);
+      }
+    } catch (error) {
+      console.error('Error searching opportunities:', error);
+      setSearchResults([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Breadcrumb navigation
@@ -118,7 +180,7 @@ export function GrantWizard() {
   return (
     <div className="w-full max-w-6xl mx-auto">
       {/* Breadcrumbs */}
-      {getBreadcrumbs().length > 0 && (
+      {getBreadcrumbs().length > 0 && currentStep !== 'results' && (
         <div className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
           <button
             onClick={resetWizard}
@@ -210,7 +272,7 @@ export function GrantWizard() {
           <p className="text-muted-foreground mb-8">
             Choose a local government area
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[600px] overflow-y-auto">
             {getCouncilsByState(wizardState.selectedState.id).map((council) => (
               <button
                 key={council.id}
@@ -268,14 +330,76 @@ export function GrantWizard() {
         </div>
       )}
 
-      {/* Step: Category Selection */}
+      {/* Step: Category Selection & Advanced Filters */}
       {currentStep === 'category' && (
         <div>
-          <h2 className="text-3xl font-bold mb-2">Select Categories (Optional)</h2>
+          <h2 className="text-3xl font-bold mb-2">Refine Your Search</h2>
           <p className="text-muted-foreground mb-8">
-            Choose one or more categories to refine your search
+            Select categories and set filters (all optional)
           </p>
 
+          {/* Advanced Filters Toggle */}
+          <button
+            onClick={() =>
+              setWizardState({
+                ...wizardState,
+                showAdvancedFilters: !wizardState.showAdvancedFilters,
+              })
+            }
+            className="mb-6 px-4 py-2 border-2 rounded-lg font-semibold hover:bg-accent transition-colors flex items-center gap-2"
+          >
+            <Filter className="h-4 w-4" />
+            {wizardState.showAdvancedFilters ? 'Hide' : 'Show'} Advanced Filters
+          </button>
+
+          {/* Advanced Filters */}
+          {wizardState.showAdvancedFilters && (
+            <div className="mb-8 p-6 border-2 rounded-xl bg-accent/50">
+              <h3 className="text-lg font-semibold mb-4">Funding Amount Range</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Minimum Amount (AUD)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-5 w-5 text-muted-foreground" />
+                    <input
+                      type="number"
+                      min="0"
+                      step="1000"
+                      placeholder="e.g. 10000"
+                      value={wizardState.minAmount}
+                      onChange={(e) =>
+                        setWizardState({ ...wizardState, minAmount: e.target.value })
+                      }
+                      className="flex-1 px-4 py-2 border-2 rounded-lg focus:border-primary focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Maximum Amount (AUD)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-5 w-5 text-muted-foreground" />
+                    <input
+                      type="number"
+                      min="0"
+                      step="1000"
+                      placeholder="e.g. 100000"
+                      value={wizardState.maxAmount}
+                      onChange={(e) =>
+                        setWizardState({ ...wizardState, maxAmount: e.target.value })
+                      }
+                      className="flex-1 px-4 py-2 border-2 rounded-lg focus:border-primary focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Grant Categories */}
           {(wizardState.opportunityType === 'grants' ||
             wizardState.opportunityType === 'both') && (
             <div className="mb-8">
@@ -299,6 +423,7 @@ export function GrantWizard() {
             </div>
           )}
 
+          {/* Tender Categories */}
           {(wizardState.opportunityType === 'tenders' ||
             wizardState.opportunityType === 'both') && (
             <div className="mb-8">
@@ -342,43 +467,11 @@ export function GrantWizard() {
 
       {/* Step: Results */}
       {currentStep === 'results' && (
-        <div>
-          <h2 className="text-3xl font-bold mb-2">Search Results</h2>
-          <p className="text-muted-foreground mb-8">
-            Based on your selections, here&apos;s what we found
-          </p>
-
-          <div className="p-8 border-2 border-dashed rounded-xl text-center">
-            <Search className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-            <h3 className="text-xl font-semibold mb-2">
-              Your search is being processed
-            </h3>
-            <p className="text-muted-foreground mb-6">
-              The Scout is now searching for opportunities matching your criteria
-            </p>
-            <div className="space-y-2 text-sm text-left max-w-md mx-auto bg-accent p-4 rounded-lg">
-              <div className="font-semibold mb-2">Search Criteria:</div>
-              {getBreadcrumbs().map((crumb, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <ChevronRight className="h-4 w-4" />
-                  <span>{crumb}</span>
-                </div>
-              ))}
-              {wizardState.selectedCategories.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <ChevronRight className="h-4 w-4" />
-                  <span>{wizardState.selectedCategories.length} categories selected</span>
-                </div>
-              )}
-            </div>
-            <button
-              onClick={resetWizard}
-              className="mt-6 px-6 py-2 border-2 rounded-lg font-semibold hover:bg-accent transition-colors"
-            >
-              Start New Search
-            </button>
-          </div>
-        </div>
+        <SearchResults
+          opportunities={searchResults}
+          isLoading={isLoading}
+          onStartNewSearch={resetWizard}
+        />
       )}
     </div>
   );
