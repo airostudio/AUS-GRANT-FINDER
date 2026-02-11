@@ -1,0 +1,88 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "framework": "nextjs",
+  "installCommand": "npm install",
+  "devCommand": "npm run dev",
+  "env": {
+    "USE_MOCK_DATA": {
+      "description": "Use mock data (true) or fetch from real APIs (false)",
+      "value": "false"
+    },
+    "AUSTENDER_API_URL": {
+      "description": "Base URL for AusTender OCDS API",
+      "value": "https://api.tenders.gov.au"
+    },
+    "AUSTENDER_API_KEY": {
+      "description": "API key for AusTender (optional)"
+    },
+    "ARC_API_URL": {
+      "description": "Base URL for Australian Research Council API",
+      "value": "https://www.arc.gov.au/api/grants"
+    },
+    "ARC_API_KEY": {
+      "description": "API key for ARC (optional - public API)"
+    },
+    "BRISBANE_API_URL": {
+      "description": "Base URL for Brisbane Council Open Data API",
+      "value": "https://data.brisbane.qld.gov.au/api/explore/v2.1/catalog/datasets/grants-recipients"
+    },
+    "BRISBANE_API_KEY": {
+      "description": "API key for Brisbane data (optional - public API)"
+    },
+    "DATA_NSW_API_URL": {
+      "description": "Base URL for NSW OpenGov API",
+      "value": "https://data.nsw.gov.au/api"
+    },
+    "NSW_OPENGOV_API_KEY": {
+      "description": "API key for NSW OpenGov (required for NSW data)"
+    },
+    "DATA_QLD_API_URL": {
+      "description": "Base URL for Queensland Open Data API",
+      "value": "https://www.data.qld.gov.au/api"
+    },
+    "QLD_API_KEY": {
+      "description": "API key for QLD data (optional - open access)"
+    },
+    "DATA_VIC_API_URL": {
+      "description": "Base URL for Victoria government API",
+      "value": "https://data.vic.gov.au/api"
+    },
+    "VIC_API_KEY": {
+      "description": "API key for VIC data (optional)"
+    },
+    "ENABLE_API_CACHE": {
+      "description": "Enable API response caching (recommended: true)",
+      "value": "true"
+    },
+    "CACHE_DURATION_MINUTES": {
+      "description": "Cache duration in minutes",
+      "value": "15"
+    },
+    "MAX_REQUESTS_PER_SECOND": {
+      "description": "Maximum API requests per second",
+      "value": "10"
+    },
+    "ENABLE_RATE_LIMITING": {
+      "description": "Enable rate limiting for API requests",
+      "value": "true"
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=900, stale-while-revalidate=1800"
+        }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/:path*"
+    }
+  ]
+}
