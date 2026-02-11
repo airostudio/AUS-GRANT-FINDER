@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { MOCK_OPPORTUNITIES, type Opportunity } from '@/lib/data';
-
-export interface SearchParams {
-  scope?: 'australia' | 'state' | 'council';
-  state?: string;
-  council?: string;
-  opportunityType?: 'grants' | 'tenders' | 'both';
-  categories?: string[];
-  minAmount?: number;
-  maxAmount?: number;
-  dateFrom?: string;
-  dateTo?: string;
-  status?: 'open' | 'closing-soon' | 'all';
-}
+import { OpportunityAggregator } from '@/lib/services';
+import type { SearchParams } from '@/lib/services';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -36,74 +24,32 @@ export async function GET(request: NextRequest) {
     status: (searchParams.get('status') as SearchParams['status']) || 'open',
   };
 
-  // Filter opportunities based on search criteria
-  let results = [...MOCK_OPPORTUNITIES];
+  try {
+    // Initialize aggregator
+    // Set useMockData to true to use mock data, false to use real APIs
+    const useMockData = process.env.USE_MOCK_DATA === 'true' || false;
 
-  // Filter by geographic scope
-  if (params.scope === 'australia') {
-    results = results.filter((opp) => opp.jurisdiction === 'federal');
-  } else if (params.scope === 'state' && params.state) {
-    results = results.filter(
-      (opp) =>
-        (opp.jurisdiction === 'state' && opp.state === params.state) ||
-        opp.jurisdiction === 'federal'
-    );
-  } else if (params.scope === 'council' && params.council) {
-    results = results.filter(
-      (opp) =>
-        (opp.jurisdiction === 'council' && opp.council === params.council) ||
-        (opp.jurisdiction === 'state' && opp.state === params.state) ||
-        opp.jurisdiction === 'federal'
-    );
-  }
-
-  // Filter by opportunity type
-  if (params.opportunityType && params.opportunityType !== 'both') {
-    const oppType: 'grant' | 'tender' =
-      params.opportunityType === 'grants' ? 'grant' : 'tender';
-    results = results.filter((opp) => opp.type === oppType);
-  }
-
-  // Filter by categories
-  if (params.categories && params.categories.length > 0) {
-    const categoryIds = params.categories.map((cat) => {
-      // Remove 'grant-' or 'tender-' prefix
-      return cat.replace(/^(grant|tender)-/, '');
+    const aggregator = new OpportunityAggregator({
+      useMockData,
+      cacheEnabled: true,
     });
-    results = results.filter((opp) => categoryIds.includes(opp.category));
-  }
 
-  // Filter by funding amount
-  if (params.minAmount !== undefined) {
-    results = results.filter(
-      (opp) => opp.amount !== null && opp.amount >= params.minAmount!
+    // Fetch opportunities from all available sources
+    const response = await aggregator.fetchOpportunities(params);
+
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error('Error in opportunities API:', error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        source: 'error',
+        count: 0,
+        opportunities: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+      },
+      { status: 500 }
     );
   }
-  if (params.maxAmount !== undefined) {
-    results = results.filter(
-      (opp) => opp.amount !== null && opp.amount <= params.maxAmount!
-    );
-  }
-
-  // Filter by date range
-  if (params.dateFrom) {
-    results = results.filter((opp) => opp.closeDate >= params.dateFrom!);
-  }
-  if (params.dateTo) {
-    results = results.filter((opp) => opp.openDate <= params.dateTo!);
-  }
-
-  // Filter by status
-  if (params.status !== 'all') {
-    results = results.filter((opp) => opp.status === params.status);
-  }
-
-  // Sort by close date (soonest first)
-  results.sort((a, b) => new Date(a.closeDate).getTime() - new Date(b.closeDate).getTime());
-
-  return NextResponse.json({
-    success: true,
-    count: results.length,
-    opportunities: results,
-  });
 }

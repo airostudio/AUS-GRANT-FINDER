@@ -194,19 +194,70 @@ pnpm --filter @ausgrant/database db:studio  # Open Prisma Studio
 pnpm --filter @ausgrant/database db:migrate # Create migration
 ```
 
-## 🎯 Target Portals
+## 🎯 Target Portals & API Integration
 
-### Federal Government
-- [GrantConnect](https://www.grants.gov.au) - Federal grants
-- [AusTender](https://www.tenders.gov.au) - Federal tenders
+### ✅ Integrated APIs (Phase 2 - Completed)
 
-### State Governments
+#### Federal Government
+- **[AusTender](https://www.tenders.gov.au)** - Federal tenders
+  📡 **API**: [OCDS API](https://github.com/austender/austender-ocds-api) (Open Contracting Data Standard)
+  ✅ **Status**: Integrated with OpportunityAggregator
+
+- **[GrantConnect](https://www.grants.gov.au)** - Federal grants
+  📡 **API**: No public API (contact GrantConnect@Finance.gov.au for bulk access)
+  ⚠️ **Status**: Manual integration pending API access
+
+- **[ARC Grants](https://www.arc.gov.au)** - Research grants since 2001
+  📡 **API**: JSON API available
+  ✅ **Status**: Integrated with ARCGrantsClient
+
+#### Local Government
+- **[Brisbane City Council](https://data.brisbane.qld.gov.au)** - Local grants data
+  📡 **API**: [Open Data API](https://data.brisbane.qld.gov.au/explore/dataset/grants-recipients/api/)
+  ✅ **Status**: Integrated with BrisbaneCouncilClient
+
+### 🔄 Planned Integrations (Phase 2 - In Progress)
+
+#### State Governments
 - **Victoria**: [tenders.vic.gov.au](https://tenders.vic.gov.au)
-- **NSW**: [nswbuy.com.au](https://nswbuy.com.au)
-- **Queensland**: [qld.gov.au/grants](https://www.qld.gov.au/grants)
+  📡 **API**: API catalogue available, integration pending
+
+- **NSW**: [nswbuy.com.au](https://nswbuy.com.au) & [OpenGov NSW API](https://data.nsw.gov.au/data/dataset/opengov-nsw-api)
+  📡 **API**: Available with API key (apply at data.nsw.gov.au)
+
+- **Queensland**: [qld.gov.au/grants](https://www.qld.gov.au/grants) & [Data.QLD](https://www.data.qld.gov.au/)
+  📡 **API**: Open datasets available via data.qld.gov.au
+
 - **South Australia**: [sa.gov.au/grants](https://www.sa.gov.au/grants)
+  📡 **API**: Manual integration required
+
 - **Western Australia**: [wa.gov.au/grants](https://www.wa.gov.au/grants)
+  📡 **API**: Manual integration required
+
 - **Tasmania**: [tas.gov.au/grants](https://www.tas.gov.au/grants)
+  📡 **API**: Manual integration required
+
+### 📊 API Integration Architecture
+
+```typescript
+OpportunityAggregator
+├── AusTenderClient (Federal Tenders)
+├── ARCGrantsClient (Research Grants)
+├── BrisbaneCouncilClient (Local Grants)
+├── [Future] NSWOpenGovClient
+├── [Future] DataQLDClient
+└── [Future] StatePortalScrapers
+```
+
+**Features:**
+- ✅ Multi-source data aggregation
+- ✅ Automatic deduplication
+- ✅ 15-minute response caching
+- ✅ Graceful fallback to mock data
+- ✅ Unified Opportunity interface
+- ✅ Rate limiting ready
+
+**See** [docs/API_INTEGRATION.md](docs/API_INTEGRATION.md) for complete API documentation and integration guides.
 
 ## 📖 Documentation
 
