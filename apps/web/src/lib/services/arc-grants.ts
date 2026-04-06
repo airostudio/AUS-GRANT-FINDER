@@ -1,156 +1,183 @@
-import { Opportunity } from '../data';
+import { Opportunity, determineOpportunityStatus } from '../data';
 import { APIClient, SearchParams } from './types';
 
 /**
- * Australian Research Council (ARC) Grants API Client
- * URL: https://www.arc.gov.au/funding-research/funding-outcomes/grants-dataset
+ * Australian Research Council (ARC) Grants Client
  *
- * Provides research grant data from ARC since 2001 in JSON format.
+ * ARC provides two data sources:
+ * 1. Current funding opportunities: https://www.arc.gov.au/funding-research/current-grants-opportunities
+ *    - Fetched via ARC's Drupal JSON:API endpoint
+ * 2. Historical grants dataset (2001-present): available as JSON download
+ *    - https://www.arc.gov.au/funding-research/funding-outcomes/grants-dataset
+ *
+ * All ARC grants are federal jurisdiction and categorised as education/research.
  */
 export class ARCGrantsClient implements APIClient {
   name = 'ARC Grants';
-  private baseUrl: string;
+  private currentOpportunitiesUrl: string;
 
   constructor() {
-    this.baseUrl =
-      process.env.ARC_API_URL || 'https://www.arc.gov.au/api/grants';
+    // ARC's Drupal JSON:API for funding opportunities nodes
+    this.currentOpportunitiesUrl =
+      process.env.ARC_API_URL ||
+      'https://www.arc.gov.au/jsonapi/node/funding_opportunity?filter[status]=1&sort=-created&page[limit]=50';
   }
 
   async isAvailable(): Promise<boolean> {
     try {
-      const response = await fetch(this.baseUrl, {
+      const response = await fetch(this.currentOpportunitiesUrl, {
         method: 'HEAD',
+        signal: AbortSignal.timeout(5000),
       });
       return response.ok;
-    } catch (error) {
-      console.error(`${this.name} API is not available:`, error);
+    } catch {
       return false;
     }
   }
 
   async fetchOpportunities(params: SearchParams): Promise<Opportunity[]> {
     try {
-      // Only fetch grants for ARC
-      if (params.opportunityType === 'tenders') {
-        return [];
-      }
+      // ARC only provides grants, skip for tender-only queries
+      if (params.opportunityType === 'tenders') return [];
 
-      // ARC is federal jurisdiction only
-      if (
-        params.scope === 'state' ||
-        params.scope === 'council' ||
-        params.state ||
-        params.council
-      ) {
-        return [];
-      }
+      // ARC is federal only
+      if (params.scope === 'council') return [];
 
-      // Build query parameters
-      const queryParams = new URLSearchParams();
-
-      // Filter by research/education category
-      if (params.categories) {
-        const hasEducation = params.categories.some((cat) =>
-          cat.includes('education')
+      // If categories are specified and none are education-related, skip
+      if (params.categories && params.categories.length > 0) {
+        const hasRelevantCategory = params.categories.some((cat) =>
+          cat.includes('education') || cat.includes('research') || cat.includes('community')
         );
-        if (!hasEducation) {
-          // If user didn't select education/research, skip ARC data
-          return [];
-        }
+        if (!hasRelevantCategory) return [];
       }
 
-      // Add amount filters
-      if (params.minAmount) {
-        queryParams.append('minValue', params.minAmount.toString());
-      }
-      if (params.maxAmount) {
-        queryParams.append('maxValue', params.maxAmount.toString());
-      }
-
-      // Add year filters based on dates
-      if (params.dateFrom || params.dateTo) {
-        const fromYear = params.dateFrom
-          ? new Date(params.dateFrom).getFullYear()
-          : 2001;
-        const toYear = params.dateTo
-          ? new Date(params.dateTo).getFullYear()
-          : new Date().getFullYear();
-
-        queryParams.append('yearFrom', fromYear.toString());
-        queryParams.append('yearTo', toYear.toString());
-      }
-
-      // Fetch data from ARC API
-      const response = await fetch(
-        `${this.baseUrl}?${queryParams.toString()}`,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`ARC Grants API error: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-
-      // Transform ARC data to our Opportunity format
-      return this.transformToOpportunities(data);
+      const opportunities = await this.fetchCurrentOpportunities(params);
+      return opportunities;
     } catch (error) {
       console.error(`${this.name} fetch error:`, error);
       return [];
     }
   }
 
-  private transformToOpportunities(data: any): Opportunity[] {
-    // Transform ARC JSON response to our Opportunity interface
-    // This is a placeholder - adjust based on actual ARC API response structure
+  private async fetchCurrentOpportunities(params: SearchParams): Promise<Opportunity[]> {
+    try {
+      const response = await fetch(this.currentOpportunitiesUrl, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/vnd.api+json, application/json',
+        },
+        signal: AbortSignal.timeout(15000),
+      });
 
-    if (!data.grants || !Array.isArray(data.grants)) {
+      if (!response.ok) {
+        console.error(`ARC API error: ${response.status} ${response.statusText}`);
+        return [];
+      }
+
+      const data = await response.json();
+      return this.transformDrupalJsonApi(data, params);
+    } catch (error) {
+      console.error(`ARC current opportunities fetch error:`, error);
       return [];
     }
-
-    return data.grants.map((grant: any, index: number) => {
-      const fundingYear = grant.fundingYear || new Date().getFullYear();
-      const startDate = `${fundingYear}-01-01`;
-      const endDate = `${fundingYear}-12-31`;
-
-      return {
-        id: `arc-${grant.id || index}`,
-        title: grant.projectTitle || grant.title || 'ARC Research Grant',
-        type: 'grant' as const,
-        category: 'education',
-        amount: grant.fundingAmount || null,
-        minAmount: grant.minimumFunding,
-        maxAmount: grant.maximumFunding,
-        description:
-          grant.projectDescription ||
-          grant.description ||
-          'Australian Research Council research funding opportunity',
-        jurisdiction: 'federal' as const,
-        openDate: grant.openDate || startDate,
-        closeDate: grant.closeDate || endDate,
-        url:
-          grant.url ||
-          `https://www.arc.gov.au/grants/${grant.id || 'details'}`,
-        status: this.determineStatus(grant.closeDate || endDate),
-      };
-    });
   }
 
-  private determineStatus(closeDateStr: string): 'open' | 'closing-soon' | 'closed' {
-    const closeDate = new Date(closeDateStr);
-    const today = new Date();
-    const diffDays = Math.ceil(
-      (closeDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-    );
+  private transformDrupalJsonApi(data: any, params: SearchParams): Opportunity[] {
+    // Handle Drupal JSON:API format
+    if (!data?.data || !Array.isArray(data.data)) return [];
 
-    if (diffDays < 0) return 'closed';
-    if (diffDays <= 7) return 'closing-soon';
-    return 'open';
+    const opportunities: Opportunity[] = [];
+
+    for (const node of data.data) {
+      const attrs = node.attributes || {};
+
+      // Get dates from various possible field names
+      const closeDate = this.extractDate(
+        attrs.field_closing_date ||
+        attrs.field_close_date ||
+        attrs.field_end_date ||
+        attrs.field_deadline
+      );
+
+      const openDate = this.extractDate(
+        attrs.field_open_date ||
+        attrs.field_opening_date ||
+        attrs.field_start_date ||
+        attrs.created
+      );
+
+      // Skip closed opportunities
+      if (closeDate) {
+        const close = new Date(closeDate);
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        if (close < yesterday) continue;
+      }
+
+      const title = attrs.title || attrs.field_title || 'ARC Funding Opportunity';
+      const description = this.extractText(
+        attrs.body?.value ||
+        attrs.field_summary?.value ||
+        attrs.field_description?.value ||
+        attrs.field_summary
+      );
+
+      const amount = attrs.field_total_funding || attrs.field_grant_value || null;
+      const minAmount = attrs.field_minimum_grant || attrs.field_min_amount;
+      const maxAmount = attrs.field_maximum_grant || attrs.field_max_amount;
+
+      // Determine URL
+      const urlAlias = attrs.path?.alias || '';
+      const url = urlAlias
+        ? `https://www.arc.gov.au${urlAlias}`
+        : `https://www.arc.gov.au/funding-research/current-grants-opportunities`;
+
+      // Filter by amount
+      if (params.minAmount && amount !== null && amount < params.minAmount) continue;
+      if (params.maxAmount && amount !== null && amount > params.maxAmount) continue;
+
+      const effectiveCloseDate = closeDate ||
+        new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const status = determineOpportunityStatus(effectiveCloseDate);
+
+      opportunities.push({
+        id: `arc-${node.id || node.attributes?.drupal_internal__nid || Math.random()}`,
+        title,
+        type: 'grant',
+        category: 'education',
+        amount: amount ? Number(amount) : null,
+        minAmount: minAmount ? Number(minAmount) : undefined,
+        maxAmount: maxAmount ? Number(maxAmount) : undefined,
+        description: description || 'Australian Research Council funding opportunity for research excellence.',
+        jurisdiction: 'federal',
+        openDate: openDate || new Date().toISOString().split('T')[0],
+        closeDate: effectiveCloseDate,
+        url,
+        status,
+      });
+    }
+
+    return opportunities;
+  }
+
+  private extractDate(value: any): string {
+    if (!value) return '';
+    if (typeof value === 'string') {
+      // Handle ISO dates like "2026-03-15T00:00:00+00:00"
+      return value.split('T')[0];
+    }
+    if (typeof value === 'object' && value.value) {
+      return String(value.value).split('T')[0];
+    }
+    return '';
+  }
+
+  private extractText(value: any): string {
+    if (!value) return '';
+    if (typeof value === 'string') {
+      // Strip HTML tags
+      return value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 500);
+    }
+    return '';
   }
 }

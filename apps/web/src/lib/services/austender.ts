@@ -1,11 +1,14 @@
-import { Opportunity } from '../data';
+import { Opportunity, determineOpportunityStatus } from '../data';
 import { APIClient, SearchParams } from './types';
 
 /**
  * AusTender OCDS API Client
  * GitHub: https://github.com/austender/austender-ocds-api
+ * Docs: https://api.tenders.gov.au/ocds/
  *
- * Provides Australian Government procurement/tender data in Open Contracting Data Standard format.
+ * Provides Australian Government procurement/tender data in Open Contracting
+ * Data Standard (OCDS) format. Covers all Commonwealth tender opportunities
+ * published on tenders.gov.au.
  */
 export class AusTenderClient implements APIClient {
   name = 'AusTender';
@@ -19,78 +22,59 @@ export class AusTenderClient implements APIClient {
 
   async isAvailable(): Promise<boolean> {
     try {
-      // Health check endpoint (example - adjust based on actual API)
-      const response = await fetch(`${this.baseUrl}/health`, {
-        method: 'GET',
-        headers: this.getHeaders(),
-      });
+      // Use a small date range to test connectivity
+      const testDate = new Date();
+      testDate.setDate(testDate.getDate() - 7);
+      const dateStr = testDate.toISOString().split('T')[0];
+      const response = await fetch(
+        `${this.baseUrl}/ocds/findByDates?publishedDateFrom=${dateStr}&publishedDateTo=${dateStr}&limit=1`,
+        { method: 'GET', headers: this.getHeaders(), signal: AbortSignal.timeout(5000) }
+      );
       return response.ok;
-    } catch (error) {
-      console.error(`${this.name} API is not available:`, error);
+    } catch {
       return false;
     }
   }
 
   async fetchOpportunities(params: SearchParams): Promise<Opportunity[]> {
     try {
-      // Only fetch tenders for AusTender
-      if (params.opportunityType === 'grants') {
-        return [];
-      }
+      // AusTender covers federal tenders only
+      if (params.opportunityType === 'grants') return [];
 
-      // Build query parameters based on OCDS API structure
-      const queryParams = new URLSearchParams();
+      // Build date range: default to next 90 days for upcoming + current
+      const today = new Date();
+      const futureDate = new Date();
+      futureDate.setDate(today.getDate() + 90);
 
-      // Add jurisdiction filters
-      if (params.scope === 'australia' || params.scope === 'state') {
-        // Federal tenders available
-        queryParams.append('jurisdiction', 'federal');
-      }
+      // Also look back 30 days to catch recently opened tenders
+      const pastDate = new Date();
+      pastDate.setDate(today.getDate() - 30);
 
-      // Add category filters (map to procurement categories)
-      if (params.categories) {
-        const tenderCategories = params.categories
-          .filter((cat) => cat.startsWith('tender-'))
-          .map((cat) => cat.replace('tender-', ''));
+      const publishedDateFrom = params.dateFrom || pastDate.toISOString().split('T')[0];
+      const publishedDateTo = params.dateTo || futureDate.toISOString().split('T')[0];
 
-        if (tenderCategories.length > 0) {
-          queryParams.append('categories', tenderCategories.join(','));
-        }
-      }
+      const queryParams = new URLSearchParams({
+        publishedDateFrom,
+        publishedDateTo,
+        limit: '200',
+      });
 
-      // Add amount filters
-      if (params.minAmount) {
-        queryParams.append('value_min', params.minAmount.toString());
-      }
-      if (params.maxAmount) {
-        queryParams.append('value_max', params.maxAmount.toString());
-      }
-
-      // Add date filters
-      if (params.dateFrom) {
-        queryParams.append('publishedFrom', params.dateFrom);
-      }
-      if (params.dateTo) {
-        queryParams.append('publishedTo', params.dateTo);
-      }
-
-      // Fetch data from AusTender API
       const response = await fetch(
-        `${this.baseUrl}/contracts?${queryParams.toString()}`,
+        `${this.baseUrl}/ocds/findByDates?${queryParams.toString()}`,
         {
           method: 'GET',
           headers: this.getHeaders(),
+          signal: AbortSignal.timeout(15000),
         }
       );
 
       if (!response.ok) {
-        throw new Error(`AusTender API error: ${response.statusText}`);
+        console.error(`AusTender API error: ${response.status} ${response.statusText}`);
+        return [];
       }
 
       const data = await response.json();
-
-      // Transform OCDS data to our Opportunity format
-      return this.transformToOpportunities(data);
+      return this.transformToOpportunities(data, params);
     } catch (error) {
       console.error(`${this.name} fetch error:`, error);
       return [];
@@ -99,70 +83,96 @@ export class AusTenderClient implements APIClient {
 
   private getHeaders(): HeadersInit {
     const headers: HeadersInit = {
-      'Content-Type': 'application/json',
       Accept: 'application/json',
     };
-
     if (this.apiKey) {
       headers['Authorization'] = `Bearer ${this.apiKey}`;
     }
-
     return headers;
   }
 
-  private transformToOpportunities(data: any): Opportunity[] {
-    // Transform OCDS format to our Opportunity interface
-    // This is a placeholder - adjust based on actual OCDS response structure
+  private transformToOpportunities(data: any, params: SearchParams): Opportunity[] {
+    if (!data?.releases || !Array.isArray(data.releases)) return [];
 
-    if (!data.releases || !Array.isArray(data.releases)) {
-      return [];
-    }
+    const opportunities: Opportunity[] = [];
 
-    return data.releases.map((release: any, index: number) => {
-      const contract = release.contracts?.[0] || {};
+    for (const release of data.releases) {
       const tender = release.tender || {};
+      const buyer = release.buyer || {};
 
-      return {
-        id: `austender-${release.ocid || index}`,
-        title: tender.title || contract.title || 'Untitled Tender',
-        type: 'tender' as const,
-        category: this.mapCategory(tender.mainProcurementCategory),
-        amount: contract.value?.amount || tender.value?.amount || null,
+      // Skip if no meaningful tender data
+      if (!tender.title && !tender.id) continue;
+
+      // Only include active tenders (not closed/cancelled)
+      const tenderStatus = tender.status || '';
+      if (tenderStatus === 'complete' || tenderStatus === 'cancelled' || tenderStatus === 'unsuccessful') {
+        continue;
+      }
+
+      const closeDate = tender.tenderPeriod?.endDate
+        ? tender.tenderPeriod.endDate.split('T')[0]
+        : '';
+      const openDate = tender.tenderPeriod?.startDate
+        ? tender.tenderPeriod.startDate.split('T')[0]
+        : (release.date ? release.date.split('T')[0] : new Date().toISOString().split('T')[0]);
+
+      // Skip tenders that closed more than 1 day ago
+      if (closeDate) {
+        const close = new Date(closeDate);
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        if (close < yesterday) continue;
+      }
+
+      const status = closeDate ? determineOpportunityStatus(closeDate) : 'open';
+      const category = this.mapCategory(tender.mainProcurementCategory, tender.title || '');
+
+      // Filter by category if specified
+      if (params.categories && params.categories.length > 0) {
+        const tenderCats = params.categories
+          .filter((c) => !c.startsWith('grant-'))
+          .map((c) => c.replace('tender-', ''));
+        if (tenderCats.length > 0 && !tenderCats.includes(category)) continue;
+      }
+
+      const amount = tender.value?.amount || null;
+
+      // Filter by amount
+      if (params.minAmount && amount !== null && amount < params.minAmount) continue;
+      if (params.maxAmount && amount !== null && amount > params.maxAmount) continue;
+
+      const ocid = release.ocid || `at-${Date.now()}-${Math.random()}`;
+      const tenderUrl = `https://www.tenders.gov.au/atm/show/${encodeURIComponent(tender.id || ocid)}`;
+
+      opportunities.push({
+        id: `austender-${ocid}`,
+        title: tender.title || `Federal Tender ${tender.id || ''}`,
+        type: 'tender',
+        category,
+        amount,
         minAmount: tender.minValue?.amount,
         maxAmount: tender.maxValue?.amount,
-        description: tender.description || contract.description || '',
-        jurisdiction: 'federal' as const,
-        openDate: tender.tenderPeriod?.startDate || new Date().toISOString().split('T')[0],
-        closeDate: tender.tenderPeriod?.endDate || new Date().toISOString().split('T')[0],
-        url: release.url || `https://www.tenders.gov.au/atm/${release.ocid}`,
-        status: this.determineStatus(tender.tenderPeriod?.endDate),
-      };
-    });
+        description: tender.description || `Federal government procurement opportunity. Buyer: ${buyer.name || 'Commonwealth of Australia'}`,
+        jurisdiction: 'federal',
+        openDate,
+        closeDate: closeDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        url: tenderUrl,
+        status,
+      });
+    }
+
+    return opportunities;
   }
 
-  private mapCategory(procurementCategory?: string): string {
-    // Map OCDS procurement categories to our categories
-    const categoryMap: { [key: string]: string } = {
-      goods: 'goods',
-      services: 'services',
-      works: 'construction',
-      consultingServices: 'consulting',
-    };
+  private mapCategory(procurementCategory?: string, title?: string): string {
+    const cat = (procurementCategory || '').toLowerCase();
+    const t = (title || '').toLowerCase();
 
-    return categoryMap[procurementCategory || ''] || 'services';
-  }
-
-  private determineStatus(closeDateStr?: string): 'open' | 'closing-soon' | 'closed' {
-    if (!closeDateStr) return 'open';
-
-    const closeDate = new Date(closeDateStr);
-    const today = new Date();
-    const diffDays = Math.ceil(
-      (closeDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-    );
-
-    if (diffDays < 0) return 'closed';
-    if (diffDays <= 7) return 'closing-soon';
-    return 'open';
+    if (cat === 'goods') return 'goods';
+    if (cat === 'works' || t.includes('construction') || t.includes('building')) return 'construction';
+    if (cat === 'consultingservices' || t.includes('consult') || t.includes('advisory')) return 'consulting';
+    if (t.includes(' it ') || t.includes('technology') || t.includes('software') || t.includes('digital') || t.includes('ict')) return 'it';
+    if (t.includes('maintenance') || t.includes('repair') || t.includes('operation')) return 'maintenance';
+    return 'services';
   }
 }

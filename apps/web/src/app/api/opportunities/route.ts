@@ -25,12 +25,7 @@ export async function GET(request: NextRequest) {
   };
 
   try {
-    // Initialize aggregator
-    // Set useMockData to true to use mock data, false to use real APIs
-    const useMockData = process.env.USE_MOCK_DATA === 'true' || false;
-
     const aggregator = new OpportunityAggregator({
-      useMockData,
       cacheEnabled: true,
     });
 

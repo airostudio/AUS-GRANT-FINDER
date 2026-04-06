@@ -1,37 +1,71 @@
-import { Opportunity, MOCK_OPPORTUNITIES } from '../data';
+import { Opportunity } from '../data';
 import { APIClient, SearchParams, APIResponse } from './types';
 import { AusTenderClient } from './austender';
 import { ARCGrantsClient } from './arc-grants';
 import { BrisbaneCouncilClient } from './brisbane-council';
+import { GrantConnectClient } from './grant-connect';
+import { NSWGrantsClient } from './nsw-grants';
+import { QLDGrantsClient } from './qld-grants';
+import { VICGrantsClient } from './vic-grants';
+import { SAGrantsClient } from './sa-grants';
+import { WAGrantsClient } from './wa-grants';
+import { TASGrantsClient } from './tas-grants';
+import { ACTNTGrantsClient } from './act-nt-grants';
 
 /**
- * Aggregator Service
+ * Opportunity Aggregator
  *
- * Combines data from multiple API sources and provides a unified interface.
- * Falls back to mock data if APIs are unavailable.
+ * Orchestrates data fetching from all Australian government grant and tender sources:
+ *
+ * Federal:
+ *   - AusTender (tenders.gov.au) - Commonwealth procurement via OCDS API
+ *   - GrantConnect (grants.gov.au) - Commonwealth grants portal
+ *   - ARC Grants (arc.gov.au) - Australian Research Council
+ *
+ * State & Territory:
+ *   - NSW: data.nsw.gov.au + nsw.gov.au/grants-and-funding
+ *   - QLD: data.qld.gov.au + qtenders.epw.qld.gov.au + business.qld.gov.au
+ *   - VIC: data.vic.gov.au + business.vic.gov.au + buyingfor.vic.gov.au
+ *   - SA:  data.sa.gov.au + tenders.sa.gov.au
+ *   - WA:  data.wa.gov.au + tenders.wa.gov.au
+ *   - TAS: grants.tas.gov.au + tenders.tas.gov.au
+ *   - ACT: data.act.gov.au + act.gov.au/funding-and-grants
+ *   - NT:  data.nt.gov.au + nt.gov.au/community/grants-and-funding
+ *
+ * Local Government:
+ *   - Brisbane City Council (data.brisbane.qld.gov.au)
  */
 export class OpportunityAggregator {
-  private clients: APIClient[];
-  private useMockData: boolean;
+  private allClients: APIClient[];
   private cacheEnabled: boolean;
   private cache: Map<string, { data: Opportunity[]; timestamp: number }>;
   private cacheDuration: number = 15 * 60 * 1000; // 15 minutes
 
   constructor(options: { useMockData?: boolean; cacheEnabled?: boolean } = {}) {
-    this.useMockData = options.useMockData ?? false;
     this.cacheEnabled = options.cacheEnabled ?? true;
     this.cache = new Map();
 
-    // Initialize all API clients
-    this.clients = [
+    // All real API clients - no mock fallback
+    this.allClients = [
+      // Federal
       new AusTenderClient(),
+      new GrantConnectClient(),
       new ARCGrantsClient(),
+      // States & Territories
+      new NSWGrantsClient(),
+      new QLDGrantsClient(),
+      new VICGrantsClient(),
+      new SAGrantsClient(),
+      new WAGrantsClient(),
+      new TASGrantsClient(),
+      new ACTNTGrantsClient(),
+      // Local Government
       new BrisbaneCouncilClient(),
     ];
   }
 
   /**
-   * Fetch opportunities from all available sources
+   * Fetch opportunities from all relevant API sources based on search params
    */
   async fetchOpportunities(params: SearchParams): Promise<APIResponse> {
     // Check cache first
@@ -39,7 +73,6 @@ export class OpportunityAggregator {
     if (this.cacheEnabled) {
       const cached = this.cache.get(cacheKey);
       if (cached && Date.now() - cached.timestamp < this.cacheDuration) {
-        console.log('Returning cached results');
         return {
           success: true,
           source: 'cache',
@@ -49,43 +82,34 @@ export class OpportunityAggregator {
       }
     }
 
-    // If mock data is enabled, return mock data
-    if (this.useMockData) {
-      return this.getMockData(params);
-    }
+    // Select relevant clients based on search scope
+    const relevantClients = this.selectClients(params);
 
     try {
-      // Fetch from all available API clients in parallel
+      // Fetch from all relevant API clients in parallel
       const results = await Promise.allSettled(
-        this.clients.map((client) => this.fetchFromClient(client, params))
+        relevantClients.map((client) => this.fetchFromClient(client, params))
       );
 
-      // Combine results from all sources
       const allOpportunities: Opportunity[] = [];
-      const sources: string[] = [];
+      const successfulSources: string[] = [];
 
       results.forEach((result, index) => {
         if (result.status === 'fulfilled' && result.value.length > 0) {
           allOpportunities.push(...result.value);
-          sources.push(this.clients[index].name);
+          successfulSources.push(relevantClients[index].name);
         } else if (result.status === 'rejected') {
           console.error(
-            `Failed to fetch from ${this.clients[index].name}:`,
+            `Failed to fetch from ${relevantClients[index].name}:`,
             result.reason
           );
         }
       });
 
-      // If no results from APIs, fallback to mock data
-      if (allOpportunities.length === 0) {
-        console.log('No results from APIs, falling back to mock data');
-        return this.getMockData(params);
-      }
-
       // Remove duplicates based on ID
       const uniqueOpportunities = this.deduplicateOpportunities(allOpportunities);
 
-      // Filter based on params
+      // Filter based on params (API clients do pre-filtering, this is a safety net)
       const filtered = this.filterOpportunities(uniqueOpportunities, params);
 
       // Sort by close date (soonest first)
@@ -101,16 +125,76 @@ export class OpportunityAggregator {
 
       return {
         success: true,
-        source: sources.join(', '),
+        source: successfulSources.length > 0 ? successfulSources.join(', ') : 'no-results',
         count: sorted.length,
         opportunities: sorted,
       };
     } catch (error) {
       console.error('Error aggregating opportunities:', error);
-
-      // Fallback to mock data on error
-      return this.getMockData(params);
+      return {
+        success: false,
+        source: 'error',
+        count: 0,
+        opportunities: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
     }
+  }
+
+  /**
+   * Select only the clients relevant to the search parameters
+   * to avoid unnecessary API calls
+   */
+  private selectClients(params: SearchParams): APIClient[] {
+    const { scope, state, council } = params;
+
+    // Australia-wide: include federal + all state clients
+    if (!scope || scope === 'australia') {
+      return this.allClients;
+    }
+
+    const selected: APIClient[] = [];
+
+    // Always include federal clients (relevant at all scopes)
+    selected.push(
+      this.allClients[0], // AusTender
+      this.allClients[1], // GrantConnect
+      this.allClients[2], // ARC
+    );
+
+    if (scope === 'state' && state) {
+      const stateClient = this.getStateClient(state);
+      if (stateClient) selected.push(stateClient);
+    }
+
+    if (scope === 'council' && state) {
+      const stateClient = this.getStateClient(state);
+      if (stateClient) selected.push(stateClient);
+
+      // Include council-specific clients
+      if (council === 'brisbane' || state === 'qld') {
+        const brisbaneClient = this.allClients.find((c) => c.name === 'Brisbane Council');
+        if (brisbaneClient) selected.push(brisbaneClient);
+      }
+    }
+
+    return selected;
+  }
+
+  private getStateClient(state: string): APIClient | undefined {
+    const stateClientMap: Record<string, string> = {
+      nsw: 'NSW Grants',
+      qld: 'QLD Grants',
+      vic: 'VIC Grants',
+      sa: 'SA Grants',
+      wa: 'WA Grants',
+      tas: 'TAS Grants',
+      act: 'ACT & NT Grants',
+      nt: 'ACT & NT Grants',
+    };
+
+    const clientName = stateClientMap[state];
+    return this.allClients.find((c) => c.name === clientName);
   }
 
   /**
@@ -121,37 +205,11 @@ export class OpportunityAggregator {
     params: SearchParams
   ): Promise<Opportunity[]> {
     try {
-      // Check if client is available
-      const isAvailable = await client.isAvailable();
-      if (!isAvailable) {
-        console.log(`${client.name} is not available, skipping`);
-        return [];
-      }
-
-      console.log(`Fetching from ${client.name}...`);
-      const opportunities = await client.fetchOpportunities(params);
-      console.log(`${client.name} returned ${opportunities.length} opportunities`);
-
-      return opportunities;
+      return await client.fetchOpportunities(params);
     } catch (error) {
       console.error(`Error fetching from ${client.name}:`, error);
       return [];
     }
-  }
-
-  /**
-   * Get mock data as fallback
-   */
-  private getMockData(params: SearchParams): APIResponse {
-    const filtered = this.filterOpportunities(MOCK_OPPORTUNITIES, params);
-    const sorted = this.sortOpportunities(filtered);
-
-    return {
-      success: true,
-      source: 'mock-data',
-      count: sorted.length,
-      opportunities: sorted,
-    };
   }
 
   /**
@@ -190,21 +248,21 @@ export class OpportunityAggregator {
 
     // Filter by categories
     if (params.categories && params.categories.length > 0) {
-      const categoryIds = params.categories.map((cat) => {
-        return cat.replace(/^(grant|tender)-/, '');
-      });
+      const categoryIds = params.categories.map((cat) =>
+        cat.replace(/^(grant|tender)-/, '')
+      );
       results = results.filter((opp) => categoryIds.includes(opp.category));
     }
 
     // Filter by funding amount
     if (params.minAmount !== undefined) {
       results = results.filter(
-        (opp) => opp.amount !== null && opp.amount >= params.minAmount!
+        (opp) => opp.amount === null || opp.amount >= params.minAmount!
       );
     }
     if (params.maxAmount !== undefined) {
       results = results.filter(
-        (opp) => opp.amount !== null && opp.amount <= params.maxAmount!
+        (opp) => opp.amount === null || opp.amount <= params.maxAmount!
       );
     }
 
@@ -217,7 +275,7 @@ export class OpportunityAggregator {
     }
 
     // Filter by status
-    if (params.status !== 'all') {
+    if (params.status && params.status !== 'all') {
       results = results.filter((opp) => opp.status === params.status);
     }
 
@@ -230,21 +288,21 @@ export class OpportunityAggregator {
   private deduplicateOpportunities(opportunities: Opportunity[]): Opportunity[] {
     const seen = new Set<string>();
     return opportunities.filter((opp) => {
-      if (seen.has(opp.id)) {
-        return false;
-      }
+      if (seen.has(opp.id)) return false;
       seen.add(opp.id);
       return true;
     });
   }
 
   /**
-   * Sort opportunities by close date (soonest first)
+   * Sort opportunities by close date (soonest first), then open ones before closing-soon
    */
   private sortOpportunities(opportunities: Opportunity[]): Opportunity[] {
-    return opportunities.sort(
-      (a, b) => new Date(a.closeDate).getTime() - new Date(b.closeDate).getTime()
-    );
+    return opportunities.sort((a, b) => {
+      const dateA = new Date(a.closeDate).getTime();
+      const dateB = new Date(b.closeDate).getTime();
+      return dateA - dateB;
+    });
   }
 
   /**
@@ -262,9 +320,9 @@ export class OpportunityAggregator {
   }
 
   /**
-   * Get available API clients
+   * Get list of all configured API clients
    */
   getClients(): string[] {
-    return this.clients.map((client) => client.name);
+    return this.allClients.map((client) => client.name);
   }
 }
