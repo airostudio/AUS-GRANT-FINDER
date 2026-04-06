@@ -1,5 +1,6 @@
 import { Opportunity, determineOpportunityStatus } from '../data';
 import { APIClient, SearchParams } from './types';
+import { apiLogger } from './logger';
 
 /**
  * GrantConnect (grants.gov.au) Federal Grants Client
@@ -27,16 +28,20 @@ export class GrantConnectClient implements APIClient {
 
   async isAvailable(): Promise<boolean> {
     try {
-      const response = await fetch(
-        `${this.baseUrl}/api/go/opportunities?status=open&limit=1`,
-        {
-          method: 'GET',
-          headers: this.getHeaders(),
-          signal: AbortSignal.timeout(5000),
-        }
-      );
+      const testUrl = `${this.baseUrl}/api/go/opportunities?status=open&limit=1`;
+      const response = await fetch(testUrl, {
+        method: 'GET',
+        headers: this.getHeaders(),
+        signal: AbortSignal.timeout(5000),
+      });
       return response.ok;
-    } catch {
+    } catch (error) {
+      apiLogger.error(
+        this.name,
+        'Health check failed',
+        error instanceof Error ? error : new Error(String(error)),
+        this.baseUrl
+      );
       return false;
     }
   }
@@ -61,7 +66,12 @@ export class GrantConnectClient implements APIClient {
 
       return opportunities;
     } catch (error) {
-      console.error(`${this.name} fetch error:`, error);
+      apiLogger.error(
+        this.name,
+        'Failed to fetch opportunities',
+        error instanceof Error ? error : new Error(String(error)),
+        this.baseUrl
+      );
       return [];
     }
   }

@@ -11,6 +11,7 @@ import { SAGrantsClient } from './sa-grants';
 import { WAGrantsClient } from './wa-grants';
 import { TASGrantsClient } from './tas-grants';
 import { ACTNTGrantsClient } from './act-nt-grants';
+import { apiLogger, apiHealthTracker } from './logger';
 
 /**
  * Opportunity Aggregator
@@ -123,20 +124,32 @@ export class OpportunityAggregator {
         });
       }
 
+      const unavailableAPIs = apiHealthTracker.getUnavailableAPIs();
+      const warnings =
+        unavailableAPIs.length > 0
+          ? `${unavailableAPIs.length} API(s) unavailable: ${unavailableAPIs.map((a) => a.name).join(', ')}`
+          : undefined;
+
+      if (warnings) {
+        apiLogger.warn('Aggregator', warnings);
+      }
+
       return {
         success: true,
         source: successfulSources.length > 0 ? successfulSources.join(', ') : 'no-results',
         count: sorted.length,
         opportunities: sorted,
+        warnings,
       };
     } catch (error) {
-      console.error('Error aggregating opportunities:', error);
+      const err = error instanceof Error ? error : new Error(String(error));
+      apiLogger.error('Aggregator', 'Critical error aggregating opportunities', err);
       return {
         success: false,
         source: 'error',
         count: 0,
         opportunities: [],
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: err.message,
       };
     }
   }
@@ -198,16 +211,46 @@ export class OpportunityAggregator {
   }
 
   /**
-   * Fetch from a single API client with error handling
+   * Fetch from a single API client with error handling and logging
    */
   private async fetchFromClient(
     client: APIClient,
     params: SearchParams
   ): Promise<Opportunity[]> {
     try {
-      return await client.fetchOpportunities(params);
+      // Check availability first
+      const isAvailable = await client.isAvailable();
+      apiHealthTracker.recordCheck(client.name, isAvailable);
+
+      if (!isAvailable) {
+        apiLogger.warn(
+          client.name,
+          'API unavailable - health check failed. Skipping this source.'
+        );
+        return [];
+      }
+
+      apiLogger.info(client.name, 'Fetching opportunities...');
+      const opportunities = await client.fetchOpportunities(params);
+
+      if (opportunities.length > 0) {
+        apiLogger.info(
+          client.name,
+          `Successfully fetched ${opportunities.length} opportunities`
+        );
+      } else {
+        apiLogger.info(client.name, 'No opportunities returned (may be filtered out)');
+      }
+
+      return opportunities;
     } catch (error) {
-      console.error(`Error fetching from ${client.name}:`, error);
+      const err = error instanceof Error ? error : new Error(String(error));
+      apiLogger.error(
+        client.name,
+        'Failed to fetch opportunities - API error',
+        err
+      );
+      apiHealthTracker.recordCheck(client.name, false, err);
       return [];
     }
   }

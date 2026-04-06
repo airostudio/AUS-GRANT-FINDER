@@ -17,4 +17,8 @@ export { ACTNTGrantsClient } from './act-nt-grants';
 // Local Government
 export { BrisbaneCouncilClient } from './brisbane-council';
 
+// Logging and monitoring
+export { apiLogger, apiHealthTracker } from './logger';
+export type { APILog, APIHealth, LogLevel } from './logger';
+
 export type { APIClient, SearchParams, APIResponse } from './types';

@@ -1,5 +1,6 @@
 import { Opportunity, determineOpportunityStatus } from '../data';
 import { APIClient, SearchParams } from './types';
+import { apiLogger } from './logger';
 
 /**
  * AusTender OCDS API Client
@@ -26,12 +27,20 @@ export class AusTenderClient implements APIClient {
       const testDate = new Date();
       testDate.setDate(testDate.getDate() - 7);
       const dateStr = testDate.toISOString().split('T')[0];
-      const response = await fetch(
-        `${this.baseUrl}/ocds/findByDates?publishedDateFrom=${dateStr}&publishedDateTo=${dateStr}&limit=1`,
-        { method: 'GET', headers: this.getHeaders(), signal: AbortSignal.timeout(5000) }
-      );
+      const testUrl = `${this.baseUrl}/ocds/findByDates?publishedDateFrom=${dateStr}&publishedDateTo=${dateStr}&limit=1`;
+      const response = await fetch(testUrl, {
+        method: 'GET',
+        headers: this.getHeaders(),
+        signal: AbortSignal.timeout(5000),
+      });
       return response.ok;
-    } catch {
+    } catch (error) {
+      apiLogger.error(
+        this.name,
+        'Health check failed',
+        error instanceof Error ? error : new Error(String(error)),
+        this.baseUrl
+      );
       return false;
     }
   }
@@ -69,14 +78,24 @@ export class AusTenderClient implements APIClient {
       );
 
       if (!response.ok) {
-        console.error(`AusTender API error: ${response.status} ${response.statusText}`);
+        apiLogger.error(
+          this.name,
+          `API returned ${response.status} ${response.statusText}`,
+          undefined,
+          `${this.baseUrl}/ocds/findByDates`
+        );
         return [];
       }
 
       const data = await response.json();
       return this.transformToOpportunities(data, params);
     } catch (error) {
-      console.error(`${this.name} fetch error:`, error);
+      apiLogger.error(
+        this.name,
+        'Failed to fetch opportunities',
+        error instanceof Error ? error : new Error(String(error)),
+        `${this.baseUrl}/ocds/findByDates`
+      );
       return [];
     }
   }

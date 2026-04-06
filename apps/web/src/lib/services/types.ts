@@ -25,4 +25,5 @@ export interface APIResponse {
   count: number;
   opportunities: Opportunity[];
   error?: string;
+  warnings?: string;
 }
