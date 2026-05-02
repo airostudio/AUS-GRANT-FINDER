@@ -21,6 +21,7 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '2mb', // Reduced from 10mb for security
     },
+    instrumentationHook: true, // Enable instrumentation for Sentry
   },
 
   // Logging (production-ready)

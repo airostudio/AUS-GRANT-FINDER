@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { kv } from '@vercel/kv';
 
 /**
  * Next.js Edge Middleware
@@ -7,25 +8,54 @@ import type { NextRequest } from 'next/server';
  * Runs on Vercel Edge Network before requests reach API routes.
  * Implements:
  * - Security headers
- * - Rate limiting
+ * - Rate limiting (Vercel KV with in-memory fallback)
  * - Request validation
  */
 
-// Simple in-memory rate limiter (resets on deployment)
-// For production with multiple instances, use Vercel KV or Upstash
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+// In-memory fallback for local development (when Vercel KV not configured)
+const memoryRateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
 const RATE_LIMIT_MAX_REQUESTS = 60; // 60 requests per minute per IP
 
-function rateLimit(ip: string): { allowed: boolean; remaining: number; resetAt: number } {
+async function rateLimit(ip: string): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
   const now = Date.now();
-  const record = rateLimitMap.get(ip);
+  const resetAt = now + RATE_LIMIT_WINDOW_MS;
+  const key = `ratelimit:${ip}`;
+
+  try {
+    // Try Vercel KV first (production)
+    const count = await kv.incr(key);
+
+    if (count === 1) {
+      // First request in window - set expiration
+      await kv.expire(key, Math.ceil(RATE_LIMIT_WINDOW_MS / 1000));
+    }
+
+    if (count > RATE_LIMIT_MAX_REQUESTS) {
+      const ttl = await kv.ttl(key);
+      const actualResetAt = now + (ttl * 1000);
+      return { allowed: false, remaining: 0, resetAt: actualResetAt };
+    }
+
+    return {
+      allowed: true,
+      remaining: RATE_LIMIT_MAX_REQUESTS - count,
+      resetAt,
+    };
+  } catch (error) {
+    // Fallback to in-memory (local development or KV unavailable)
+    console.warn('Vercel KV unavailable, using in-memory rate limiting:', error);
+    return rateLimitMemory(ip, now, resetAt);
+  }
+}
+
+function rateLimitMemory(ip: string, now: number, resetAt: number): { allowed: boolean; remaining: number; resetAt: number } {
+  const record = memoryRateLimitMap.get(ip);
 
   if (!record || now > record.resetAt) {
     // New window
-    const resetAt = now + RATE_LIMIT_WINDOW_MS;
-    rateLimitMap.set(ip, { count: 1, resetAt });
+    memoryRateLimitMap.set(ip, { count: 1, resetAt });
     return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - 1, resetAt };
   }
 
@@ -51,7 +81,7 @@ function getIP(request: NextRequest): string {
   );
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const response = NextResponse.next();
 
   // Apply security headers to all responses
@@ -60,7 +90,7 @@ export function middleware(request: NextRequest) {
   // Rate limit API routes only
   if (request.nextUrl.pathname.startsWith('/api/')) {
     const ip = getIP(request);
-    const { allowed, remaining, resetAt } = rateLimit(ip);
+    const { allowed, remaining, resetAt } = await rateLimit(ip);
 
     // Add rate limit headers
     response.headers.set('X-RateLimit-Limit', String(RATE_LIMIT_MAX_REQUESTS));
