@@ -81,7 +81,7 @@ function getIP(request: NextRequest): string {
   );
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const response = NextResponse.next();
 
   // Apply security headers to all responses
@@ -162,7 +162,7 @@ function applySecurityHeaders(response: NextResponse) {
   response.headers.delete('X-Powered-By');
 }
 
-// Configure which paths the middleware runs on
+// Configure which paths the proxy runs on
 export const config = {
   matcher: [
     /*
