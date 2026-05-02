@@ -4,31 +4,36 @@ import { APIClient, SearchParams } from './types';
 /**
  * Brisbane City Council Open Data API Client
  *
- * Uses the Brisbane City Council OpenDataSoft platform:
- * - Grants recipients dataset (historical + current programs):
- *   https://data.brisbane.qld.gov.au/explore/dataset/grants-recipients/api/
- * - Active tenders:
- *   https://www.brisbane.qld.gov.au/business-and-investment/working-with-council/tenders-and-contracts
+ * Uses the Brisbane City Council OpenDataSoft platform for CURRENT opportunities only:
+ * - Current tenders (if available):
+ *   https://data.brisbane.qld.gov.au/api/explore/v2.1/catalog/datasets/current-tenders
+ * - Active grant programs (must have published opportunities, not historical recipients)
+ *
+ * NOTE: Historical grant recipient data is NOT transformed into current opportunities.
+ * Only real, published opportunities are returned.
  *
  * OpenDataSoft ODSQL API docs:
  * https://data.brisbane.qld.gov.au/api/explore/v2.1/
  */
 export class BrisbaneCouncilClient implements APIClient {
   name = 'Brisbane Council';
-  private grantsBaseUrl: string;
   private tendersBaseUrl: string;
+  private grantsBaseUrl: string;
 
   constructor() {
-    this.grantsBaseUrl =
-      process.env.BRISBANE_API_URL ||
-      'https://data.brisbane.qld.gov.au/api/explore/v2.1/catalog/datasets/grants-recipients';
+    // Try current-tenders dataset first
     this.tendersBaseUrl =
       'https://data.brisbane.qld.gov.au/api/explore/v2.1/catalog/datasets/current-tenders';
+    // For grants, would need a dataset of current opportunities, not historical recipients
+    this.grantsBaseUrl =
+      process.env.BRISBANE_GRANTS_API_URL ||
+      'https://data.brisbane.qld.gov.au/api/explore/v2.1/catalog/datasets/current-grants-opportunities';
   }
 
   async isAvailable(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.grantsBaseUrl}/records?limit=1`, {
+      // Check if tenders dataset is available
+      const response = await fetch(`${this.tendersBaseUrl}/records?limit=1`, {
         method: 'GET',
         signal: AbortSignal.timeout(5000),
       });
@@ -47,11 +52,8 @@ export class BrisbaneCouncilClient implements APIClient {
 
       const results: Opportunity[] = [];
 
-      if (params.opportunityType !== 'tenders') {
-        const grants = await this.fetchGrants(params);
-        results.push(...grants);
-      }
-
+      // Only fetch tenders for now
+      // Grants would require a dataset of CURRENT published opportunities, not historical recipients
       if (params.opportunityType !== 'grants') {
         const tenders = await this.fetchTenders(params);
         results.push(...tenders);
@@ -64,52 +66,8 @@ export class BrisbaneCouncilClient implements APIClient {
     }
   }
 
-  private async fetchGrants(params: SearchParams): Promise<Opportunity[]> {
-    try {
-      const queryParams = new URLSearchParams({
-        limit: '100',
-        order_by: 'financial_year desc',
-      });
-
-      // Build ODSQL where clause for category filtering
-      const whereFilters: string[] = [];
-
-      if (params.categories) {
-        const grantCats = params.categories
-          .filter((c) => !c.startsWith('tender-'))
-          .map((c) => c.replace('grant-', ''));
-
-        if (grantCats.length > 0) {
-          const catFilter = this.buildCategoryFilter(grantCats);
-          if (catFilter) whereFilters.push(catFilter);
-        }
-      }
-
-      if (whereFilters.length > 0) {
-        queryParams.set('where', whereFilters.join(' AND '));
-      }
-
-      const response = await fetch(
-        `${this.grantsBaseUrl}/records?${queryParams.toString()}`,
-        {
-          method: 'GET',
-          headers: { Accept: 'application/json' },
-          signal: AbortSignal.timeout(15000),
-        }
-      );
-
-      if (!response.ok) {
-        console.error(`Brisbane grants API error: ${response.status}`);
-        return [];
-      }
-
-      const data = await response.json();
-      return this.transformGrants(data, params);
-    } catch (error) {
-      console.error(`Brisbane grants fetch error:`, error);
-      return [];
-    }
-  }
+  // Grants would be fetched here if Brisbane publishes a dataset of CURRENT grant opportunities
+  // Historical grant recipient data should NOT be transformed into current opportunities
 
   private async fetchTenders(params: SearchParams): Promise<Opportunity[]> {
     try {
@@ -133,75 +91,9 @@ export class BrisbaneCouncilClient implements APIClient {
     }
   }
 
-  private transformGrants(data: any, params: SearchParams): Opportunity[] {
-    if (!data?.results && !data?.records) return [];
-
-    const records = data.results || data.records || [];
-    const programMap = new Map<string, {
-      name: string;
-      category: string;
-      totalAmount: number;
-      count: number;
-      latestYear: string;
-    }>();
-
-    // Aggregate by program name to create current opportunities from historical data
-    for (const record of records) {
-      const fields = record.record?.fields || record.fields || record;
-      const programName = fields.grant_program || fields.program_name || fields.grant_category || 'Community Grant';
-      const amount = Number(fields.grant_amount || fields.amount || 0);
-      const year = String(fields.financial_year || fields.year || '');
-      const category = this.categorizeGrant(programName);
-
-      if (!programMap.has(programName)) {
-        programMap.set(programName, { name: programName, category, totalAmount: 0, count: 0, latestYear: year });
-      }
-
-      const prog = programMap.get(programName)!;
-      prog.totalAmount += amount;
-      prog.count += 1;
-      if (year > prog.latestYear) prog.latestYear = year;
-    }
-
-    const opportunities: Opportunity[] = [];
-    const currentYear = new Date().getFullYear();
-
-    for (const [, prog] of programMap) {
-      const avgAmount = prog.count > 0 ? Math.round(prog.totalAmount / prog.count) : 10000;
-
-      // Filter by amount
-      if (params.minAmount && avgAmount < params.minAmount) continue;
-      if (params.maxAmount && avgAmount > params.maxAmount) continue;
-
-      // Calculate next round close date (Brisbane grants typically open Feb-June)
-      const closeDate = this.nextGrantCloseDate();
-      const openDate = this.nextGrantOpenDate();
-      const status = determineOpportunityStatus(closeDate);
-
-      // Only include if status matches
-      if (params.status && params.status !== 'all' && status !== params.status) continue;
-
-      opportunities.push({
-        id: `brisbane-${prog.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').substring(0, 40)}`,
-        title: `${prog.name} — Brisbane City Council`,
-        type: 'grant',
-        category: prog.category,
-        amount: avgAmount,
-        minAmount: Math.round(avgAmount * 0.2),
-        maxAmount: avgAmount,
-        description: `Brisbane City Council grant program. Based on ${prog.count} historical recipients averaging $${avgAmount.toLocaleString()}. Program: ${prog.name}.`,
-        jurisdiction: 'council',
-        state: 'qld',
-        council: 'brisbane',
-        openDate,
-        closeDate,
-        url: 'https://www.brisbane.qld.gov.au/community-support-and-safety/grants-and-sponsorship/applying-for-a-grant/community-grants',
-        status,
-      });
-    }
-
-    return opportunities;
-  }
+  // REMOVED: transformGrants method that was generating synthetic opportunities from historical data
+  // Brisbane's "grants-recipients" dataset contains PAST recipients, not current opportunities
+  // This should NOT be transformed into fake "current" grant opportunities
 
   private transformTenders(data: any, params: SearchParams): Opportunity[] {
     if (!data?.results && !data?.records) return [];
@@ -271,33 +163,9 @@ export class BrisbaneCouncilClient implements APIClient {
     return 'services';
   }
 
-  private buildCategoryFilter(categories: string[]): string | null {
-    if (categories.length === 0) return null;
-    const conditions = categories.flatMap((cat) => {
-      switch (cat) {
-        case 'community': return ["search(grant_program, 'community')"];
-        case 'arts': return ["search(grant_program, 'art')", "search(grant_program, 'culture')"];
-        case 'environment': return ["search(grant_program, 'environment')", "search(grant_program, 'sustainability')"];
-        case 'sport': return ["search(grant_program, 'sport')", "search(grant_program, 'recreation')"];
-        case 'health': return ["search(grant_program, 'health')"];
-        default: return [];
-      }
-    });
-    return conditions.length > 0 ? conditions.join(' OR ') : null;
-  }
-
-  private nextGrantCloseDate(): string {
-    const d = new Date();
-    // Brisbane grants typically close in June
-    const year = d.getMonth() >= 5 ? d.getFullYear() + 1 : d.getFullYear();
-    return `${year}-06-13`;
-  }
-
-  private nextGrantOpenDate(): string {
-    const d = new Date();
-    const year = d.getMonth() >= 5 ? d.getFullYear() + 1 : d.getFullYear();
-    return `${year}-02-01`;
-  }
+  // REMOVED: Helper methods for synthetic grant data generation
+  // buildCategoryFilter, nextGrantCloseDate, nextGrantOpenDate
+  // These were used to create fake opportunities from historical data
 
   private parseDate(value: any): string {
     if (!value) return '';
