@@ -12,7 +12,9 @@ import {
   Search,
   TrendingUp,
   AlertCircle,
+  Globe,
 } from 'lucide-react';
+import { getJurisdictionPortals, FEDERAL_PORTALS } from '@/lib/government-links';
 
 type TabType = 'current' | 'upcoming';
 
@@ -262,6 +264,46 @@ export default function OpportunitiesPage() {
             </button>
           </div>
         </div>
+
+        {/* Official Government Portals */}
+        {!isLoading && (
+          <div className="mb-6 p-4 border-2 border-blue-200 bg-blue-50 rounded-xl">
+            <div className="flex items-start gap-2 mb-3">
+              <Globe className="h-5 w-5 text-blue-600 mt-1" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-blue-900">Official Government Portals</h3>
+                <p className="text-sm text-blue-700">
+                  Browse all opportunities directly on official government websites
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+              {FEDERAL_PORTALS.map((portal) => (
+                <a
+                  key={portal.name}
+                  href={portal.grantsUrl || portal.tendersUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm hover:bg-blue-100 transition-colors flex items-center justify-between group"
+                  title={portal.description}
+                >
+                  <span className="font-medium text-blue-900">{portal.name}</span>
+                  <ExternalLink className="h-4 w-4 text-blue-600 group-hover:translate-x-0.5 transition-transform" />
+                </a>
+              ))}
+              <a
+                href="https://www.business.gov.au/grants-and-programs/grant-finder"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm hover:bg-blue-100 transition-colors flex items-center justify-between group"
+                title="Find state and territory grants"
+              >
+                <span className="font-medium text-blue-900">State Grants Finder</span>
+                <ExternalLink className="h-4 w-4 text-blue-600 group-hover:translate-x-0.5 transition-transform" />
+              </a>
+            </div>
+          </div>
+        )}
 
         {/* Loading State */}
         {isLoading && (

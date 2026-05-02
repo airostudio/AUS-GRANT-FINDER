@@ -1,7 +1,8 @@
 'use client';
 
 import { Opportunity } from '@/lib/data';
-import { Calendar, DollarSign, MapPin, ExternalLink, Clock } from 'lucide-react';
+import { Calendar, DollarSign, MapPin, ExternalLink, Clock, Globe } from 'lucide-react';
+import { getJurisdictionPortals, getPortalLink } from '@/lib/government-links';
 
 interface SearchResultsProps {
   opportunities: Opportunity[];
@@ -80,6 +81,27 @@ export function SearchResults({
     );
   }
 
+  // Get unique jurisdictions from opportunities
+  const jurisdictions = Array.from(
+    new Set(
+      opportunities.map((opp) => ({
+        jurisdiction: opp.jurisdiction,
+        state: opp.state,
+        council: opp.council,
+      }))
+    )
+  );
+
+  // Get official portals to show
+  const officialPortals = jurisdictions.flatMap((j) =>
+    getJurisdictionPortals(j.jurisdiction, j.state, j.council)
+  );
+
+  // Remove duplicates
+  const uniquePortals = Array.from(
+    new Map(officialPortals.map((p) => [p.name, p])).values()
+  );
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -96,6 +118,49 @@ export function SearchResults({
           New Search
         </button>
       </div>
+
+      {/* Official Government Portals */}
+      {uniquePortals.length > 0 && (
+        <div className="mb-6 p-4 border-2 border-blue-200 bg-blue-50 rounded-xl">
+          <div className="flex items-start gap-2 mb-3">
+            <Globe className="h-5 w-5 text-blue-600 mt-1" />
+            <div>
+              <h3 className="font-semibold text-blue-900">Official Government Portals</h3>
+              <p className="text-sm text-blue-700">
+                Browse more opportunities on official government websites
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {uniquePortals.map((portal) => (
+              <div key={portal.name} className="flex items-center gap-2">
+                {portal.grantsUrl && (
+                  <a
+                    href={portal.grantsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm hover:bg-blue-100 transition-colors flex items-center justify-between group"
+                  >
+                    <span className="font-medium text-blue-900">{portal.name}</span>
+                    <ExternalLink className="h-4 w-4 text-blue-600 group-hover:translate-x-0.5 transition-transform" />
+                  </a>
+                )}
+                {portal.tendersUrl && !portal.grantsUrl && (
+                  <a
+                    href={portal.tendersUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm hover:bg-blue-100 transition-colors flex items-center justify-between group"
+                  >
+                    <span className="font-medium text-blue-900">{portal.name}</span>
+                    <ExternalLink className="h-4 w-4 text-blue-600 group-hover:translate-x-0.5 transition-transform" />
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {opportunities.length === 0 ? (
         <div className="p-12 border-2 border-dashed rounded-xl text-center">
