@@ -1,8 +1,13 @@
 'use client';
 
 import { Opportunity } from '@/lib/data';
-import { Calendar, DollarSign, MapPin, ExternalLink, Clock, Globe } from 'lucide-react';
-import { getJurisdictionPortals, getPortalLink } from '@/lib/government-links';
+import { Calendar, DollarSign, MapPin, ExternalLink, Clock, Globe, Star } from 'lucide-react';
+import {
+  getJurisdictionPortals,
+  getPortalLink,
+  getStateGrantFinderUrl,
+  getStateName,
+} from '@/lib/government-links';
 
 interface SearchResultsProps {
   opportunities: Opportunity[];
@@ -92,6 +97,11 @@ export function SearchResults({
     )
   );
 
+  // Get unique states
+  const uniqueStates = Array.from(
+    new Set(opportunities.filter((opp) => opp.state).map((opp) => opp.state!))
+  );
+
   // Get official portals to show
   const officialPortals = jurisdictions.flatMap((j) =>
     getJurisdictionPortals(j.jurisdiction, j.state, j.council)
@@ -131,6 +141,40 @@ export function SearchResults({
               </p>
             </div>
           </div>
+
+          {/* Featured State Grant Finders */}
+          {uniqueStates.length > 0 && (
+            <div className="mb-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Star className="h-4 w-4 text-amber-600" />
+                <h4 className="text-sm font-semibold text-blue-900">
+                  State Grant Finders (business.gov.au)
+                </h4>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {uniqueStates.map((state) => {
+                  const url = getStateGrantFinderUrl(state);
+                  if (!url) return null;
+                  return (
+                    <a
+                      key={state}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-2 bg-amber-50 border-2 border-amber-300 rounded-lg text-sm hover:bg-amber-100 transition-colors flex items-center justify-between group font-medium"
+                    >
+                      <span className="text-amber-900">
+                        {getStateName(state)} Grants
+                      </span>
+                      <ExternalLink className="h-4 w-4 text-amber-700 group-hover:translate-x-0.5 transition-transform" />
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Other Official Portals */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {uniquePortals.map((portal) => (
               <div key={portal.name} className="flex items-center gap-2">
@@ -140,6 +184,7 @@ export function SearchResults({
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex-1 px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm hover:bg-blue-100 transition-colors flex items-center justify-between group"
+                    title={portal.description}
                   >
                     <span className="font-medium text-blue-900">{portal.name}</span>
                     <ExternalLink className="h-4 w-4 text-blue-600 group-hover:translate-x-0.5 transition-transform" />
@@ -151,6 +196,7 @@ export function SearchResults({
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex-1 px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm hover:bg-blue-100 transition-colors flex items-center justify-between group"
+                    title={portal.description}
                   >
                     <span className="font-medium text-blue-900">{portal.name}</span>
                     <ExternalLink className="h-4 w-4 text-blue-600 group-hover:translate-x-0.5 transition-transform" />

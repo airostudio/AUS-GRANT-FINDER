@@ -13,8 +13,15 @@ import {
   TrendingUp,
   AlertCircle,
   Globe,
+  Star,
 } from 'lucide-react';
-import { getJurisdictionPortals, FEDERAL_PORTALS } from '@/lib/government-links';
+import {
+  getJurisdictionPortals,
+  FEDERAL_PORTALS,
+  STATE_GRANT_FINDER_URLS,
+  ALL_GRANTS_FINDER_URL,
+  getStateName,
+} from '@/lib/government-links';
 
 type TabType = 'current' | 'upcoming';
 
@@ -277,30 +284,64 @@ export default function OpportunitiesPage() {
                 </p>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-              {FEDERAL_PORTALS.map((portal) => (
+
+            {/* Featured: All Grants & State Finders */}
+            <div className="mb-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Star className="h-4 w-4 text-amber-600" />
+                <h4 className="text-sm font-semibold text-blue-900">
+                  Comprehensive Grant Finders
+                </h4>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
                 <a
-                  key={portal.name}
-                  href={portal.grantsUrl || portal.tendersUrl}
+                  href={ALL_GRANTS_FINDER_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm hover:bg-blue-100 transition-colors flex items-center justify-between group"
-                  title={portal.description}
+                  className="px-3 py-2 bg-amber-50 border-2 border-amber-300 rounded-lg text-sm hover:bg-amber-100 transition-colors flex items-center justify-between group font-medium"
+                  title="All Australian grants and programs"
                 >
-                  <span className="font-medium text-blue-900">{portal.name}</span>
-                  <ExternalLink className="h-4 w-4 text-blue-600 group-hover:translate-x-0.5 transition-transform" />
+                  <span className="text-amber-900">All Australia Grants</span>
+                  <ExternalLink className="h-4 w-4 text-amber-700 group-hover:translate-x-0.5 transition-transform" />
                 </a>
-              ))}
-              <a
-                href="https://www.business.gov.au/grants-and-programs/grant-finder"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm hover:bg-blue-100 transition-colors flex items-center justify-between group"
-                title="Find state and territory grants"
-              >
-                <span className="font-medium text-blue-900">State Grants Finder</span>
-                <ExternalLink className="h-4 w-4 text-blue-600 group-hover:translate-x-0.5 transition-transform" />
-              </a>
+                {Object.entries(STATE_GRANT_FINDER_URLS).map(([stateCode, url]) => (
+                  <a
+                    key={stateCode}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-2 bg-white border border-amber-200 rounded-lg text-sm hover:bg-amber-50 transition-colors flex items-center justify-between group"
+                    title={`${getStateName(stateCode)} grants and programs`}
+                  >
+                    <span className="font-medium text-amber-900">
+                      {stateCode.toUpperCase()} Grants
+                    </span>
+                    <ExternalLink className="h-4 w-4 text-amber-700 group-hover:translate-x-0.5 transition-transform" />
+                  </a>
+                ))}
+              </div>
+            </div>
+
+            {/* Federal Portals */}
+            <div>
+              <h4 className="text-sm font-semibold text-blue-900 mb-2">
+                Federal Government Portals
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                {FEDERAL_PORTALS.map((portal) => (
+                  <a
+                    key={portal.name}
+                    href={portal.grantsUrl || portal.tendersUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm hover:bg-blue-100 transition-colors flex items-center justify-between group"
+                    title={portal.description}
+                  >
+                    <span className="font-medium text-blue-900">{portal.name}</span>
+                    <ExternalLink className="h-4 w-4 text-blue-600 group-hover:translate-x-0.5 transition-transform" />
+                  </a>
+                ))}
+              </div>
             </div>
           </div>
         )}

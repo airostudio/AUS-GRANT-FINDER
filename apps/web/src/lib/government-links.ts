@@ -44,6 +44,11 @@ export const FEDERAL_PORTALS: GovernmentPortal[] = [
 export const STATE_PORTALS: Record<string, GovernmentPortal[]> = {
   nsw: [
     {
+      name: 'NSW State Grants Finder',
+      grantsUrl: 'https://business.gov.au/grants-and-programs?cloc=fi42',
+      description: 'Find all NSW Government grants and programs (business.gov.au)',
+    },
+    {
       name: 'NSW Government Grants',
       grantsUrl: 'https://www.nsw.gov.au/grants-and-funding',
       description: 'Find grants and funding from the NSW Government',
@@ -61,6 +66,11 @@ export const STATE_PORTALS: Record<string, GovernmentPortal[]> = {
   ],
   vic: [
     {
+      name: 'VIC State Grants Finder',
+      grantsUrl: 'https://business.gov.au/grants-and-programs?cloc=fi47',
+      description: 'Find all Victorian Government grants and programs (business.gov.au)',
+    },
+    {
       name: 'Business Victoria Grants',
       grantsUrl: 'https://business.vic.gov.au/grants-and-programs',
       description: 'Victorian Government grants and programs',
@@ -72,6 +82,11 @@ export const STATE_PORTALS: Record<string, GovernmentPortal[]> = {
     },
   ],
   qld: [
+    {
+      name: 'QLD State Grants Finder',
+      grantsUrl: 'https://business.gov.au/grants-and-programs?cloc=fi44',
+      description: 'Find all Queensland Government grants and programs (business.gov.au)',
+    },
     {
       name: 'Business Queensland Grants',
       grantsUrl: 'https://www.business.qld.gov.au/starting-business/grants-assistance',
@@ -85,6 +100,11 @@ export const STATE_PORTALS: Record<string, GovernmentPortal[]> = {
   ],
   wa: [
     {
+      name: 'WA State Grants Finder',
+      grantsUrl: 'https://business.gov.au/grants-and-programs?cloc=fi48',
+      description: 'Find all Western Australian Government grants and programs (business.gov.au)',
+    },
+    {
       name: 'WA Government Grants',
       grantsUrl: 'https://www.wa.gov.au/government/publications/grants-wa',
       description: 'Western Australian Government grants',
@@ -96,6 +116,11 @@ export const STATE_PORTALS: Record<string, GovernmentPortal[]> = {
     },
   ],
   sa: [
+    {
+      name: 'SA State Grants Finder',
+      grantsUrl: 'https://business.gov.au/grants-and-programs?cloc=fi45',
+      description: 'Find all South Australian Government grants and programs (business.gov.au)',
+    },
     {
       name: 'SA Grants and Funding',
       grantsUrl: 'https://www.sa.gov.au/topics/business-and-trade/grants-and-loans',
@@ -109,6 +134,11 @@ export const STATE_PORTALS: Record<string, GovernmentPortal[]> = {
   ],
   tas: [
     {
+      name: 'TAS State Grants Finder',
+      grantsUrl: 'https://business.gov.au/grants-and-programs?cloc=fi46',
+      description: 'Find all Tasmanian Government grants and programs (business.gov.au)',
+    },
+    {
       name: 'Tasmania Grants',
       grantsUrl: 'https://www.grants.tas.gov.au/',
       description: 'Tasmanian Government grants portal',
@@ -121,6 +151,11 @@ export const STATE_PORTALS: Record<string, GovernmentPortal[]> = {
   ],
   act: [
     {
+      name: 'ACT State Grants Finder',
+      grantsUrl: 'https://business.gov.au/grants-and-programs?cloc=fi41',
+      description: 'Find all ACT Government grants and programs (business.gov.au)',
+    },
+    {
       name: 'ACT Grants and Funding',
       grantsUrl: 'https://www.act.gov.au/funding-and-grants',
       description: 'ACT Government funding opportunities',
@@ -132,6 +167,11 @@ export const STATE_PORTALS: Record<string, GovernmentPortal[]> = {
     },
   ],
   nt: [
+    {
+      name: 'NT State Grants Finder',
+      grantsUrl: 'https://business.gov.au/grants-and-programs?cloc=fi43',
+      description: 'Find all Northern Territory Government grants and programs (business.gov.au)',
+    },
     {
       name: 'NT Grants and Funding',
       grantsUrl: 'https://nt.gov.au/community/grants-and-funding',
@@ -268,4 +308,47 @@ export function getJurisdictionName(
   }
 
   return 'Government';
+}
+
+/**
+ * State-specific grant finder URLs from business.gov.au
+ */
+export const STATE_GRANT_FINDER_URLS: Record<string, string> = {
+  nsw: 'https://business.gov.au/grants-and-programs?cloc=fi42',
+  vic: 'https://business.gov.au/grants-and-programs?cloc=fi47',
+  qld: 'https://business.gov.au/grants-and-programs?cloc=fi44',
+  wa: 'https://business.gov.au/grants-and-programs?cloc=fi48',
+  sa: 'https://business.gov.au/grants-and-programs?cloc=fi45',
+  tas: 'https://business.gov.au/grants-and-programs?cloc=fi46',
+  act: 'https://business.gov.au/grants-and-programs?cloc=fi41',
+  nt: 'https://business.gov.au/grants-and-programs?cloc=fi43',
+};
+
+/**
+ * All grants and programs (including territories and national)
+ */
+export const ALL_GRANTS_FINDER_URL = 'https://business.gov.au/grants-and-programs?cloc=fi49';
+
+/**
+ * Get state grant finder URL
+ */
+export function getStateGrantFinderUrl(state: string): string | undefined {
+  return STATE_GRANT_FINDER_URLS[state.toLowerCase()];
+}
+
+/**
+ * Get full state name
+ */
+export function getStateName(stateCode: string): string {
+  const stateNames: Record<string, string> = {
+    nsw: 'New South Wales',
+    vic: 'Victoria',
+    qld: 'Queensland',
+    wa: 'Western Australia',
+    sa: 'South Australia',
+    tas: 'Tasmania',
+    act: 'Australian Capital Territory',
+    nt: 'Northern Territory',
+  };
+  return stateNames[stateCode.toLowerCase()] || stateCode.toUpperCase();
 }
