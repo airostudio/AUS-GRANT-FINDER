@@ -22,6 +22,11 @@ export const FEDERAL_PORTALS: GovernmentPortal[] = [
     description: 'Australian Government grants portal - find and apply for federal grants',
   },
   {
+    name: 'Community Grants Hub',
+    grantsUrl: 'https://www.communitygrants.gov.au/grants',
+    description: 'Community and local government grants administered by the Department of Social Services',
+  },
+  {
     name: 'AusTender',
     tendersUrl: 'https://www.tenders.gov.au/',
     description: 'Commonwealth procurement and tender opportunities',

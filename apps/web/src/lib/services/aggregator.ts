@@ -4,6 +4,7 @@ import { AusTenderClient } from './austender';
 import { ARCGrantsClient } from './arc-grants';
 import { BrisbaneCouncilClient } from './brisbane-council';
 import { GrantConnectClient } from './grant-connect';
+import { CommunityGrantsHubClient } from './community-grants-hub';
 import { NSWGrantsClient } from './nsw-grants';
 import { QLDGrantsClient } from './qld-grants';
 import { VICGrantsClient } from './vic-grants';
@@ -22,6 +23,7 @@ import { apiLogger, apiHealthTracker } from './logger';
  *   - AusTender (tenders.gov.au) - Commonwealth procurement via OCDS API
  *   - GrantConnect (grants.gov.au) - Commonwealth grants portal
  *   - ARC Grants (arc.gov.au) - Australian Research Council
+ *   - Community Grants Hub (communitygrants.gov.au) - Community & local govt grants
  *
  * State & Territory:
  *   - NSW: data.nsw.gov.au + nsw.gov.au/grants-and-funding
@@ -52,6 +54,7 @@ export class OpportunityAggregator {
       new AusTenderClient(),
       new GrantConnectClient(),
       new ARCGrantsClient(),
+      new CommunityGrantsHubClient(),
       // States & Territories
       new NSWGrantsClient(),
       new QLDGrantsClient(),
@@ -173,6 +176,7 @@ export class OpportunityAggregator {
       this.allClients[0], // AusTender
       this.allClients[1], // GrantConnect
       this.allClients[2], // ARC
+      this.allClients[3], // Community Grants Hub
     );
 
     if (scope === 'state' && state) {
